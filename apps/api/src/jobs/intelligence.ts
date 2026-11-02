@@ -1,4 +1,4 @@
-import const SKILL_KEYWORDS = [
+export const SKILL_KEYWORDS = [
   "javascript", "typescript", "node.js", "express", "react", "next.js", "python",
   "java", "c++", "go", "rust", "sql", "postgresql", "mysql", "sqlite", "mongodb",
   "redis", "prisma", "drizzle", "docker", "kubernetes", "aws", "azure", "gcp",
