@@ -28,6 +28,7 @@ type JobSource = {
   enabled: boolean;
   createdAt: string;
 };
+type SourceCatalogEntry = { id: string; provider: Provider; boardId: string; displayName: string; description: string; careersUrl: string; focus: string };
 type SourcePreview = {
   success: boolean;
   provider: Provider;
@@ -42,6 +43,8 @@ const API = "http://localhost:4000";
 export function App() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [sources, setSources] = useState<JobSource[]>([]);
+  const [catalog, setCatalog] = useState<SourceCatalogEntry[]>([]);
+  const [catalogLoading, setCatalogLoading] = useState(false);
   const [query, setQuery] = useState("");
   const [location, setLocation] = useState("");
   const [source, setSource] = useState("");
@@ -78,6 +81,20 @@ export function App() {
       setLoading(false);
     }
   }, [query, location, source]);
+
+  const loadCatalog = useCallback(async () => {
+    setCatalogLoading(true);
+    try {
+      const response = await fetch(`${API}/api/sources/catalog`);
+      const body = await response.json() as { data?: SourceCatalogEntry[]; error?: string };
+      if (!response.ok) throw new Error(body.error || "Could not load starter catalog");
+      setCatalog(body.data ?? []);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not load starter catalog");
+    } finally {
+      setCatalogLoading(false);
+    }
+  }, []);
 
   const loadSources = useCallback(async () => {
     setSourcesLoading(true);
@@ -140,6 +157,41 @@ export function App() {
       }
     } catch (e) {
       setSourceMessage(e instanceof Error ? e.message : "Could not add source");
+    } finally {
+      setSavingSource(false);
+    }
+  }
+
+  async function addCatalogSource(item: SourceCatalogEntry) {
+    setSavingSource(true);
+    setSourceMessage("");
+    setPreview(null);
+    try {
+      const response = await fetch(`${API}/api/sources`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider: item.provider, boardId: item.boardId, displayName: item.displayName })
+      });
+      const body = await response.json() as { data?: JobSource; error?: string; detail?: string };
+      if (!response.ok || !body.data) {
+        if (response.status === 409) {
+          await loadSources();
+          throw new Error("This board is already configured. Check the Company career boards list.");
+        }
+        throw new Error(body.detail || body.error || "Could not add source");
+      }
+      const saved = body.data;
+      setSources(current => [saved, ...current]);
+      const testResponse = await fetch(`${API}/api/sources/${saved.id}/test`, { method: "POST" });
+      const testBody = await testResponse.json() as SourcePreview;
+      if (!testResponse.ok || !testBody.success) {
+        setSourceMessage(`${item.displayName} was saved, but live validation failed: ${testBody.detail || testBody.error || "Provider did not respond successfully"}`);
+      } else {
+        setPreview(testBody);
+        setSourceMessage(`${item.displayName} validated: ${testBody.jobCount} public postings returned. Press Sync job sources to import them.`);
+      }
+    } catch (e) {
+      setSourceMessage(e instanceof Error ? e.message : "Could not add catalog source");
     } finally {
       setSavingSource(false);
     }
@@ -248,6 +300,29 @@ export function App() {
         </article>)}
         {!sources.length && !sourcesLoading && <div className="source-empty">No database-managed boards yet. Add your first public career board above.</div>}
       </div>
+    </section>
+
+    <section className="catalog-section">
+      <div className="section-heading">
+        <div><span className="eyebrow-dark">STARTER CATALOG</span><h3>Discover public company boards</h3><p>Suggested boards you can add and validate before importing jobs.</p></div>
+        <button className="secondary" disabled={catalogLoading} onClick={() => void loadCatalog()}>{catalogLoading ? "Loading…" : "Refresh catalog"}</button>
+      </div>
+      <div className="catalog-grid">
+        {catalog.map(item => {
+          const configured = sources.some(sourceItem => sourceItem.provider === item.provider && sourceItem.boardId.toLowerCase() === item.boardId.toLowerCase());
+          return <article className="catalog-card" key={item.id}>
+            <div className="catalog-card-top"><span className={`source source-${item.provider.toLowerCase()}`}>{item.provider}</span><span className="catalog-focus">{item.focus}</span></div>
+            <h4>{item.displayName}</h4>
+            <p>{item.description}</p>
+            <div className="catalog-card-actions">
+              <a href={item.careersUrl} target="_blank" rel="noreferrer">Career board ↗</a>
+              <button className="small-action" disabled={savingSource || configured} onClick={() => void addCatalogSource(item)}>{configured ? "Added" : "Add & validate"}</button>
+            </div>
+          </article>;
+        })}
+        {!catalog.length && !catalogLoading && <div className="source-empty">Starter catalog is unavailable. You can still add a board manually above.</div>}
+      </div>
+      <p className="form-hint">Catalog entries are suggestions, not verified live openings. Each board is checked when you add it. A successful check only confirms the public feed responded; sync imports the returned postings.</p>
     </section>
 
     <section className="toolbar">
