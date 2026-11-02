@@ -14,4 +14,6 @@ export interface NormalizedJob {
   discoveredAt: string;
   lastVerifiedAt: string | null;
   status: JobStatus;
+  category: string;
+  skillsJson: string;
 }
