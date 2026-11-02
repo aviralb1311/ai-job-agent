@@ -4,28 +4,27 @@ import { ashbyConnector } from "./ashby.js";
 import { normalizeJob } from "../normalize.js";
 
 const boards = [
-  { provider: greenhouseConnector, boardId: process.env.GREENHOUSE_SMOKE_BOARD ?? "stripe" },
-  { provider: leverConnector, boardId: process.env.LEVER_SMOKE_BOARD ?? "everbridge" },
-  { provider: ashbyConnector, boardId: process.env.ASHBY_SMOKE_BOARD ?? "plane" }
+  { provider: greenhouseConnector, boardId: process.env.GREENHOUSE_SMOKE_BOARD },
+  { provider: leverConnector, boardId: process.env.LEVER_SMOKE_BOARD },
+  { provider: ashbyConnector, boardId: process.env.ASHBY_SMOKE_BOARD }
 ];
+
+const missing = boards.filter(item => !item.boardId?.trim());
+if (missing.length > 0) {
+  throw new Error("Set GREENHOUSE_SMOKE_BOARD, LEVER_SMOKE_BOARD, and ASHBY_SMOKE_BOARD to valid public board IDs before running the live smoke test.");
+}
 
 let failed = false;
 
-for (const { provider, boardId } of boards) {
+for (const { provider, boardId } of boards as Array<{ provider: typeof greenhouseConnector | typeof leverConnector | typeof ashbyConnector; boardId: string }>) {
   try {
     const jobs = await provider.fetchBoard(boardId);
-    if (jobs.length === 0) {
-      throw new Error("The board returned zero public job postings");
-    }
+    if (jobs.length === 0) throw new Error("The board returned zero public job postings");
 
     const invalid = jobs.filter(job =>
-      !job.id.trim() ||
-      !job.title.trim() ||
-      !/^https:\/\//i.test(job.url)
+      !job.id.trim() || !job.title.trim() || !/^https:\/\//i.test(job.url)
     );
-    if (invalid.length > 0) {
-      throw new Error(`${invalid.length} postings failed required-field validation`);
-    }
+    if (invalid.length > 0) throw new Error(`${invalid.length} postings failed required-field validation`);
 
     const normalized = normalizeJob(provider.provider, jobs[0]);
     if (!normalized.externalId || !normalized.title || !normalized.applicationUrl.startsWith("https://")) {
