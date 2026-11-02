@@ -97,3 +97,14 @@ The API exposes a starter catalog of candidate Greenhouse, Lever, and Ashby boar
 - Matching skills can show where they appear in the saved resume sections (skills, education, experience, projects, and certifications), with short text excerpts for context.
 - The analysis reports missing required/preferred skills, strengths, gaps, and practical next steps. It never adds qualifications to the profile or edits the resume.
 - Matching is deterministic and keyword-based. It does not use an external AI provider, verify claims, infer seniority, or predict interview/hiring outcomes. Always inspect the original listing and decide whether its requirements fit your actual experience.
+
+
+## Application preparation drafts (Phase 1.15)
+
+- Each job has a **Prepare application** action that creates one persistent local draft from the saved candidate profile, reviewed resume sections, and job description.
+- The draft includes a resume-tailoring summary, evidence highlights, and a role-specific cover-letter starting point. The original resume is never modified.
+- Only skills that match the saved candidate profile and evidence excerpts from reviewed resume sections are used as candidate-specific claims. If no matching evidence exists, the draft leaves those claims out and adds a review note rather than inventing qualifications.
+- Drafts are editable and saved locally per job. The API refuses to generate a second draft for the same job so existing edits are not silently overwritten.
+- **Save & mark reviewed** records the user's review timestamp. This means approved for the user's own manual use only; it does not submit an application, contact an employer, or authorize automated actions.
+- No external AI provider is called and no credentials for job boards are collected. Users must verify every statement, personalize the draft, and submit through the employer's official application process themselves.
+- After pulling this phase, run `npm run db:generate` and `npm run db:push` from the repository root to add the `ApplicationDraft` table to the local SQLite database.
