@@ -69,4 +69,4 @@ npm run test:live-sources -w @job-agent/api
 
 ## Starter source catalog
 
-The dashboard includes a curated set of public Greenhouse, Lever, and Ashby board identifiers discovered from employer career pages. They are convenience suggestions, not a guarantee that any job is currently open or that a particular role is suitable. Add a source from the catalog and validate it against the live provider before syncing. Board availability and role locations can change at any time.
+The API exposes a starter catalog of candidate Greenhouse, Lever, and Ashby board identifiers at `GET /api/sources/catalog`. These are suggestions only: they are not pre-validated, are not automatically added, and may become stale. Add a source and use the live validation action before syncing; do not treat a catalog entry as proof that a board is currently active or has suitable openings.
