@@ -4,6 +4,7 @@ import { config } from "./config.js";
 import { prisma } from "./db.js";
 import { previewSource, syncJobs } from "./jobs/service.js";
 import { sourceCatalog } from "./jobs/source-catalog.js";
+import { scoreJobMatch, type CandidatePreferences } from "./jobs/intelligence.js";
 
 export const app = express();
 app.use(cors({ origin: config.CORS_ORIGIN }));
@@ -17,6 +18,61 @@ app.get("/api/health", async (_req, res) => {
     res.json({ status: "ok", database: "connected" });
   } catch {
     res.status(503).json({ status: "degraded", database: "unavailable" });
+  }
+});
+
+const DEFAULT_PROFILE: CandidatePreferences = { skills: [], preferredRoles: [], locations: [], remotePreference: "ANY" };
+const REMOTE_PREFERENCES = ["ANY", "REMOTE", "ONSITE", "HYBRID"] as const;
+
+function parseProfile(row: { skillsJson: string; preferredRoles: string; locations: string; remotePreference: string } | null): CandidatePreferences {
+  if (!row) return DEFAULT_PROFILE;
+  const read = (value: string): string[] => {
+    try {
+      const parsed: unknown = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
+    } catch { return []; }
+  };
+  return {
+    skills: read(row.skillsJson),
+    preferredRoles: read(row.preferredRoles),
+    locations: read(row.locations),
+    remotePreference: REMOTE_PREFERENCES.includes(row.remotePreference as typeof REMOTE_PREFERENCES[number])
+      ? row.remotePreference as CandidatePreferences["remotePreference"] : "ANY"
+  };
+}
+
+app.get("/api/profile", async (_req, res) => {
+  try {
+    const profile = await prisma.candidateProfile.findUnique({ where: { id: "default" } });
+    res.json({ data: parseProfile(profile) });
+  } catch (error) {
+    res.status(500).json({ error: "Unable to retrieve candidate profile", detail: error instanceof Error ? error.message : "Unknown error" });
+  }
+});
+
+app.put("/api/profile", async (req, res) => {
+  const body = req.body ?? {};
+  const validList = (value: unknown): value is string[] =>
+    Array.isArray(value) && value.length <= 50 && value.every(item => typeof item === "string" && item.trim().length > 0 && item.length <= 80);
+  if (!validList(body.skills) || !validList(body.preferredRoles) || !validList(body.locations) ||
+      !REMOTE_PREFERENCES.includes(body.remotePreference)) {
+    res.status(400).json({ error: "skills, preferredRoles and locations must be arrays of up to 50 non-empty strings; remotePreference must be ANY, REMOTE, ONSITE or HYBRID" });
+    return;
+  }
+  const clean = (items: string[]) => [...new Set(items.map(item => item.trim()))];
+  try {
+    const data = {
+      skillsJson: JSON.stringify(clean(body.skills)),
+      preferredRoles: JSON.stringify(clean(body.preferredRoles)),
+      locations: JSON.stringify(clean(body.locations)),
+      remotePreference: body.remotePreference as CandidatePreferences["remotePreference"]
+    };
+    const saved = await prisma.candidateProfile.upsert({
+      where: { id: "default" }, create: { id: "default", ...data }, update: data
+    });
+    res.json({ data: parseProfile(saved) });
+  } catch (error) {
+    res.status(500).json({ error: "Unable to save candidate profile", detail: error instanceof Error ? error.message : "Unknown error" });
   }
 });
 
@@ -45,7 +101,21 @@ app.get("/api/jobs", async (req, res) => {
       prisma.job.count({ where })
     ]);
 
-    res.json({ data: jobs, count: jobs.length, total });
+    const profileRow = await prisma.candidateProfile.findUnique({ where: { id: "default" } });
+    const profile = parseProfile(profileRow);
+    const enriched = jobs.map(job => {
+      let skills: string[] = [];
+      try {
+        const parsed: unknown = JSON.parse(job.skillsJson);
+        if (Array.isArray(parsed)) skills = parsed.filter((item): item is string => typeof item === "string");
+      } catch { /* malformed stored metadata is treated as empty */ }
+      return {
+        ...job,
+        skills,
+        match: scoreJobMatch({ title: job.title, location: job.location, category: job.category, skills }, profile)
+      };
+    });
+    res.json({ data: enriched, count: enriched.length, total, profileConfigured: Boolean(profile.skills.length || profile.preferredRoles.length || profile.locations.length || profile.remotePreference !== "ANY") });
   } catch (error) {
     res.status(500).json({
       error: "Unable to retrieve jobs",

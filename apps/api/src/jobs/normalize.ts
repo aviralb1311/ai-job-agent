@@ -1,5 +1,6 @@
 import type { NormalizedJob } from "@job-agent/shared";
 import type { ProviderJob } from "./types.js";
+import { analyzeJob } from "./intelligence.js";
 
 export function normalizeJob(provider: string, raw: ProviderJob): NormalizedJob {
   const published = raw.publishedAt ? new Date(raw.publishedAt) : null;
@@ -9,7 +10,10 @@ export function normalizeJob(provider: string, raw: ProviderJob): NormalizedJob 
     : type.includes("part") ? "PART_TIME"
     : type.includes("contract") ? "CONTRACT"
     : type.includes("full") ? "FULL_TIME" : "UNKNOWN";
+  const intelligence = analyzeJob(raw.title, raw.description ?? "");
   return {
+    category: intelligence.category,
+    skillsJson: JSON.stringify(intelligence.skills),
     source: provider,
     externalId: raw.id,
     title: raw.title.trim(),
