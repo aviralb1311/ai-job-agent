@@ -5,6 +5,7 @@ import { prisma } from "./db.js";
 import { previewSource, syncJobs } from "./jobs/service.js";
 import { sourceCatalog } from "./jobs/source-catalog.js";
 import { scoreJobMatch, type CandidatePreferences } from "./jobs/intelligence.js";
+import { parseResumeBuffer, ResumeParseError } from "./jobs/resume-parser.js";
 
 export const app = express();
 app.use(cors({ origin: config.CORS_ORIGIN }));
@@ -73,6 +74,90 @@ app.put("/api/profile", async (req, res) => {
     res.json({ data: parseProfile(saved) });
   } catch (error) {
     res.status(500).json({ error: "Unable to save candidate profile", detail: error instanceof Error ? error.message : "Unknown error" });
+  }
+});
+
+
+const RESUME_SECTIONS = ["skills", "education", "experience", "projects", "certifications"] as const;
+function readJsonList(value: string): string[] {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
+  } catch { return []; }
+}
+
+app.post("/api/resume/parse", express.raw({
+  type: ["application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
+  limit: "5mb"
+}), async (req, res) => {
+  const contentType = req.header("content-type")?.split(";")[0].trim().toLowerCase();
+  const fileType = contentType === "application/pdf" ? "pdf"
+    : contentType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ? "docx" : null;
+  if (!fileType) {
+    res.status(415).json({ error: "Upload a PDF or DOCX resume." });
+    return;
+  }
+  if (!Buffer.isBuffer(req.body) || !req.body.length) {
+    res.status(400).json({ error: "The uploaded resume is empty or was not sent as a binary file." });
+    return;
+  }
+  try {
+    const parsed = await parseResumeBuffer(req.body, fileType);
+    res.json({ data: parsed.draft, extractedCharacters: parsed.text.length, reviewRequired: true });
+  } catch (error) {
+    const status = error instanceof ResumeParseError ? 422 : 500;
+    res.status(status).json({ error: error instanceof Error ? error.message : "Resume parsing failed." });
+  }
+});
+
+app.put("/api/profile/resume", async (req, res) => {
+  const body = req.body ?? {};
+  const validList = (value: unknown): value is string[] =>
+    Array.isArray(value) && value.length <= 50 && value.every(item =>
+      typeof item === "string" && item.trim().length > 0 && item.length <= 500
+    );
+  if (!RESUME_SECTIONS.every(section => validList(body[section]))) {
+    res.status(400).json({ error: "Each resume section must be an array of up to 50 non-empty strings (500 characters max each)." });
+    return;
+  }
+  const clean = (items: string[]) => [...new Set(items.map(item => item.trim()))];
+  try {
+    const data = {
+      skillsJson: JSON.stringify(clean(body.skills)),
+      educationJson: JSON.stringify(clean(body.education)),
+      experienceJson: JSON.stringify(clean(body.experience)),
+      projectsJson: JSON.stringify(clean(body.projects)),
+      certificationsJson: JSON.stringify(clean(body.certifications))
+    };
+    const saved = await prisma.candidateProfile.upsert({
+      where: { id: "default" },
+      create: { id: "default", ...data },
+      update: data
+    });
+    res.json({ data: {
+      skills: readJsonList(saved.skillsJson),
+      education: readJsonList(saved.educationJson),
+      experience: readJsonList(saved.experienceJson),
+      projects: readJsonList(saved.projectsJson),
+      certifications: readJsonList(saved.certificationsJson)
+    } });
+  } catch (error) {
+    res.status(500).json({ error: "Unable to save reviewed resume profile", detail: error instanceof Error ? error.message : "Unknown error" });
+  }
+});
+
+app.get("/api/profile/resume", async (_req, res) => {
+  try {
+    const profile = await prisma.candidateProfile.findUnique({ where: { id: "default" } });
+    res.json({ data: {
+      skills: readJsonList(profile?.skillsJson ?? "[]"),
+      education: readJsonList(profile?.educationJson ?? "[]"),
+      experience: readJsonList(profile?.experienceJson ?? "[]"),
+      projects: readJsonList(profile?.projectsJson ?? "[]"),
+      certifications: readJsonList(profile?.certificationsJson ?? "[]")
+    } });
+  } catch (error) {
+    res.status(500).json({ error: "Unable to retrieve reviewed resume profile", detail: error instanceof Error ? error.message : "Unknown error" });
   }
 });
 

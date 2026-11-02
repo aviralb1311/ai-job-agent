@@ -44,6 +44,10 @@ model CandidateProfile {
   locations        String   @default("[]")
   remotePreference String   @default("ANY")
   updatedAt        DateTime @updatedAt
+  educationJson    String   @default("[]")
+  experienceJson   String   @default("[]")
+  projectsJson     String   @default("[]")
+  certificationsJson String @default("[]")
 }
 
 model Job {

@@ -76,3 +76,14 @@ This is a transparent keyword-based baseline, not an LLM judgment, a prediction 
 ## Starter source catalog
 
 The API exposes a starter catalog of candidate Greenhouse, Lever, and Ashby board identifiers at `GET /api/sources/catalog`. These are suggestions only: they are not pre-validated, are not automatically added, and may become stale. Add a source and use the live validation action before syncing; do not treat a catalog entry as proof that a board is currently active or has suitable openings.
+
+
+## Resume intelligence (Phase 1.13)
+
+- Upload text-based PDF or DOCX resumes (maximum 5 MB); extraction runs in the API process and uploaded bytes are not written to disk or retained.
+- PDF text extraction uses Mozilla PDF.js; DOCX text is read from the document XML entry with bounded decompression.
+- Extracted skills use the existing deterministic job skill keyword catalog. Education, experience, projects, and certifications are grouped using common section headings and remain editable.
+- Parsing is a best-effort heuristic. Scanned PDFs, OCR, complex multi-column layouts, and semantic interpretation are not supported. Empty or low-text extraction is reported instead of inventing profile facts.
+- Parsed fields are only persisted after the user reviews and explicitly approves them. Saving the resume profile updates the candidate profile's skill list and resume sections; role, location, and work-mode preferences remain unchanged.
+- Resume content is processed locally by this app and is not sent to an external AI provider. No resume file is stored.
+- After pulling this phase, run `npm run db:generate` and `npm run db:push` to add the resume profile fields.

@@ -20,7 +20,8 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
-    "zod": "^4.6.7"
+    "zod": "^4.6.7",
+    "pdfjs-dist": "4.7.76"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
