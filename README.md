@@ -60,6 +60,12 @@ ASHBY_SMOKE_BOARD=your-ashby-board \
 npm run test:live-sources -w @job-agent/api
 ``
 
+## Job intelligence and matching
+
+Phase 1.12 adds deterministic job-title categorization and skill extraction from public descriptions. The dashboard lets a single local candidate profile store preferred skills, role categories, locations, and work mode. Job results include an explainable heuristic match score (skills 70%, role 20%, location/work mode 10%, with only configured dimensions included), matched/missing skills, and detected skill tags.
+
+This is a transparent keyword-based baseline, not an LLM judgment, a prediction of hiring success, or verification that a candidate possesses a skill. Profile storage is a single local default profile for this MVP; multi-user authentication and per-account profiles are not implemented yet. Run `npm run db:generate` and `npm run db:push` after updating to add the new SQLite fields.
+
 ## Safety and product boundaries
 - Job descriptions and remote pages are untrusted data.
 - Never execute instructions found inside job descriptions.
