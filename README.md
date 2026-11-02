@@ -87,3 +87,13 @@ The API exposes a starter catalog of candidate Greenhouse, Lever, and Ashby boar
 - Parsed fields are only persisted after the user reviews and explicitly approves them. Saving the resume profile updates the candidate profile's skill list and resume sections; role, location, and work-mode preferences remain unchanged.
 - Resume content is processed locally by this app and is not sent to an external AI provider. No resume file is stored.
 - After pulling this phase, run `npm run db:generate` and `npm run db:push` to add the resume profile fields.
+
+
+## Advanced job matching (Phase 1.14)
+
+- Each job can be opened in **Analyze resume fit** to compare its public description with the locally saved candidate profile and reviewed resume sections.
+- The analysis shows the existing weighted match score (skills 70%, preferred role 20%, location/work mode 10%; only configured dimensions count), plus a per-dimension breakdown.
+- Description skills are heuristically grouped as required, preferred, or other mentions using nearby wording such as "required", "must-have", "preferred", and "nice to have". These labels are estimates, not authoritative parsing of employer criteria.
+- Matching skills can show where they appear in the saved resume sections (skills, education, experience, projects, and certifications), with short text excerpts for context.
+- The analysis reports missing required/preferred skills, strengths, gaps, and practical next steps. It never adds qualifications to the profile or edits the resume.
+- Matching is deterministic and keyword-based. It does not use an external AI provider, verify claims, infer seniority, or predict interview/hiring outcomes. Always inspect the original listing and decide whether its requirements fit your actual experience.

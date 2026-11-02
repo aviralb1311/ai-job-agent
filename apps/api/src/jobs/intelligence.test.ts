@@ -19,6 +19,12 @@ describe("job intelligence", () => {
     expect(result.matchedSkills).toEqual(["Node.js", "PostgreSQL"]);
     expect(result.missingSkills).toEqual(["Docker"]);
     expect(result.reasons).toHaveLength(3);
+    expect(result.breakdown).toMatchObject({ skills: { score: 67, matched: 2, total: 3 }, role: { matched: true }, location: { matched: true } });
+  });
+  it("normalizes human-readable role preferences and rejects unknown on-site location", () => {
+    const result = scoreJobMatch({ title: "Backend Engineer", location: null, category: "BACKEND", skills: [] }, { skills: [], preferredRoles: ["Backend Developer"], locations: [], remotePreference: "ONSITE" });
+    expect(result.breakdown.role.matched).toBe(true);
+    expect(result.breakdown.location.matched).toBe(false);
   });
   it("does not invent a score for an empty profile", () => {
     expect(scoreJobMatch({ title: "Engineer", location: null, category: "OTHER", skills: [] }, { skills: [], preferredRoles: [], locations: [], remotePreference: "ANY" }).score).toBeNull();
