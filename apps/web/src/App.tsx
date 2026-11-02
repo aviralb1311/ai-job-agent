@@ -43,6 +43,7 @@ type SourcePreview = {
 };
 type CandidateProfile = { skills: string[]; preferredRoles: string[]; locations: string[]; remotePreference: "ANY" | "REMOTE" | "ONSITE" | "HYBRID" };
 type ResumeDraft = { skills: string[]; education: string[]; experience: string[]; projects: string[]; certifications: string[] };
+type ApplicationDraft = { id: string; jobId: string; resumeSummary: string; highlights: string[]; coverLetter: string; reviewNotes: string[]; status: "DRAFT" | "REVIEWED"; reviewedAt: string | null; createdAt: string; updatedAt: string };
 type JobFitAnalysis = {
   score: number | null;
   breakdown: { skills: { score: number | null; matched: number; total: number; weight: number }; role: { matched: boolean | null; weight: number }; location: { matched: boolean | null; weight: number } };
@@ -87,6 +88,9 @@ export function App() {
   const [resumeMessage, setResumeMessage] = useState("");
   const [analysis, setAnalysis] = useState<{ jobId: string; data: JobFitAnalysis } | null>(null);
   const [analysisBusy, setAnalysisBusy] = useState<string | null>(null);
+  const [applicationDraft, setApplicationDraft] = useState<{ jobId: string; data: ApplicationDraft } | null>(null);
+  const [draftBusy, setDraftBusy] = useState<string | null>(null);
+  const [draftMessage, setDraftMessage] = useState("");
 
   const loadJobs = useCallback(async (filters = { query, location, source }) => {
     setLoading(true);
@@ -163,6 +167,96 @@ export function App() {
       setError(e instanceof Error ? e.message : "Could not analyze job fit");
     } finally {
       setAnalysisBusy(null);
+    }
+  }
+
+
+  async function openApplicationDraft(jobId: string) {
+    if (applicationDraft?.jobId === jobId) {
+      setApplicationDraft(null);
+      setDraftMessage("");
+      return;
+    }
+    setDraftBusy(jobId);
+    setDraftMessage("");
+    setError("");
+    try {
+      const path = API + "/api/jobs/" + encodeURIComponent(jobId) + "/application-draft";
+      const existingResponse = await fetch(path);
+      const existingBody = await existingResponse.json() as { data?: ApplicationDraft | null; error?: string };
+      if (!existingResponse.ok) throw new Error(existingBody.error || "Could not load application draft");
+      if (existingBody.data) {
+        setApplicationDraft({ jobId, data: existingBody.data });
+        return;
+      }
+      const response = await fetch(path, { method: "POST" });
+      const body = await response.json() as { data?: ApplicationDraft; error?: string; detail?: string };
+      if (!response.ok || !body.data) throw new Error(body.detail || body.error || "Could not prepare application draft");
+      setApplicationDraft({ jobId, data: body.data });
+      setDraftMessage("Draft generated from your saved, reviewed profile. Edit and save it before marking it reviewed.");
+    } catch (e) {
+      setDraftMessage(e instanceof Error ? e.message : "Could not prepare application draft");
+    } finally {
+      setDraftBusy(null);
+    }
+  }
+
+  function updateApplicationDraft(field: "resumeSummary" | "coverLetter", value: string) {
+    setApplicationDraft(current => current ? {
+      ...current,
+      data: { ...current.data, [field]: value, status: "DRAFT", reviewedAt: null }
+    } : current);
+  }
+
+  function updateDraftHighlight(index: number, value: string) {
+    setApplicationDraft(current => current ? {
+      ...current,
+      data: { ...current.data, highlights: current.data.highlights.map((item, i) => i === index ? value : item), status: "DRAFT", reviewedAt: null }
+    } : current);
+  }
+
+  async function saveApplicationDraft() {
+    if (!applicationDraft) return false;
+    setDraftBusy(applicationDraft.jobId);
+    setDraftMessage("");
+    try {
+      const response = await fetch(API + "/api/jobs/" + encodeURIComponent(applicationDraft.jobId) + "/application-draft", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          resumeSummary: applicationDraft.data.resumeSummary,
+          highlights: applicationDraft.data.highlights.filter(item => item.trim()),
+          coverLetter: applicationDraft.data.coverLetter
+        })
+      });
+      const body = await response.json() as { data?: ApplicationDraft; error?: string; detail?: string };
+      if (!response.ok || !body.data) throw new Error(body.detail || body.error || "Could not save application draft");
+      setApplicationDraft({ jobId: applicationDraft.jobId, data: body.data });
+      setDraftMessage("Your edits are saved locally.");
+      return true;
+    } catch (e) {
+      setDraftMessage(e instanceof Error ? e.message : "Could not save application draft");
+      return false;
+    } finally {
+      setDraftBusy(null);
+    }
+  }
+
+  async function markApplicationDraftReviewed() {
+    if (!applicationDraft) return;
+    const saved = await saveApplicationDraft();
+    if (!saved) return;
+    setDraftBusy(applicationDraft.jobId);
+    try {
+      const response = await fetch(API + "/api/jobs/" + encodeURIComponent(applicationDraft.jobId) + "/application-draft/review", { method: "POST" });
+      const body = await response.json() as { data?: ApplicationDraft; message?: string; error?: string; detail?: string };
+      if (!response.ok || !body.data) throw new Error(body.detail || body.error || "Could not mark draft reviewed");
+      setApplicationDraft({ jobId: applicationDraft.jobId, data: body.data });
+      setDraftMessage(body.message || "Marked reviewed for manual use only.");
+    } catch (e) {
+      setDraftMessage(e instanceof Error ? e.message : "Could not mark draft reviewed");
+    } finally {
+      setDraftBusy(null);
     }
   }
 
@@ -575,6 +669,31 @@ export function App() {
           </button>
           <a href={job.applicationUrl} target="_blank" rel="noreferrer">View original listing ↗</a>
         </div>
+
+        <button className="small-action secondary" type="button" disabled={draftBusy === job.id} onClick={() => void openApplicationDraft(job.id)}>
+          {draftBusy === job.id ? "Preparing…" : applicationDraft?.jobId === job.id ? "Hide application draft" : "Prepare application"}
+        </button>
+        {applicationDraft?.jobId === job.id && <div className="application-draft-panel">
+          <div className="fit-analysis-top"><strong>Editable application draft</strong><span>{applicationDraft.data.status === "REVIEWED" ? "Reviewed for manual use" : "Draft · Not reviewed"}</span></div>
+          <p className="form-hint">Generated only from your saved candidate profile and reviewed resume entries. Check every claim and personalize the wording. Nothing is submitted or sent.</p>
+          <label>Resume tailoring summary
+            <textarea rows={5} value={applicationDraft.data.resumeSummary} onChange={event => updateApplicationDraft("resumeSummary", event.target.value)} placeholder="No matching resume evidence was found. Add only accurate details." />
+          </label>
+          <label>Evidence highlights
+            {applicationDraft.data.highlights.map((item, index) => <textarea key={index} rows={2} value={item} onChange={event => updateDraftHighlight(index, event.target.value)} />)}
+            {!applicationDraft.data.highlights.length && <small>No direct evidence highlights detected.</small>}
+          </label>
+          <label>Cover letter
+            <textarea rows={12} value={applicationDraft.data.coverLetter} onChange={event => updateApplicationDraft("coverLetter", event.target.value)} />
+          </label>
+          {!!applicationDraft.data.reviewNotes.length && <div><strong>Review notes</strong><ul>{applicationDraft.data.reviewNotes.map(note => <li key={note}>{note}</li>)}</ul></div>}
+          <div className="draft-actions">
+            <button type="button" disabled={draftBusy === job.id} onClick={() => void saveApplicationDraft()}>{draftBusy === job.id ? "Saving…" : "Save edits"}</button>
+            <button type="button" className="secondary" disabled={draftBusy === job.id || applicationDraft.data.status === "REVIEWED"} onClick={() => void markApplicationDraftReviewed()}>Save & mark reviewed</button>
+          </div>
+          {draftMessage && <p className="resume-message" role="status">{draftMessage}</p>}
+          <p className="fit-disclaimer">Reviewed means you approved this text for your own manual use only. It is not an application submission or authorization for automated contact.</p>
+        </div>}
         {analysis?.jobId === job.id && <div className="fit-analysis">
           <div className="fit-analysis-top"><strong>Resume-to-job analysis</strong><span>{analysis.data.score === null ? "Add preferences to calculate a score" : `${analysis.data.score}% profile match`}</span></div>
           <div className="fit-breakdown">
