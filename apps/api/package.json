@@ -11,7 +11,8 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev --name init",
     "test:live-sources": "tsx src/jobs/connectors/live-smoke.ts",
-    "test:catalog-live": "tsx src/jobs/catalog-live-smoke.ts"
+    "test:catalog-live": "tsx src/jobs/catalog-live-smoke.ts",
+    "db:push": "prisma db push"
   },
   "dependencies": {
     "@job-agent/shared": "0.1.0",
