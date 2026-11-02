@@ -9,7 +9,8 @@
     "start": "node dist/server.js",
     "test": "vitest run --config vitest.config.ts",
     "db:generate": "prisma generate",
-    "db:migrate": "prisma migrate dev --name init"
+    "db:migrate": "prisma migrate dev --name init",
+    "test:live-sources": "tsx src/jobs/connectors/live-smoke.ts"
   },
   "dependencies": {
     "@job-agent/shared": "0.1.0",
