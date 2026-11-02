@@ -5,7 +5,7 @@ import { prisma } from "./db.js";
 import { previewSource, syncJobs } from "./jobs/service.js";
 import { sourceCatalog } from "./jobs/source-catalog.js";
 import { scoreJobMatch, type CandidatePreferences } from "./jobs/intelligence.js";
-import { parseResumeBuffer, ResumeParseError, type ResumeDraft } from "./jobs/resume-parser.js";
+import { parseResumeBuffer, ResumeParseError } from "./jobs/resume-parser.js";
 
 export const app = express();
 app.use(cors({ origin: config.CORS_ORIGIN }));
@@ -122,7 +122,6 @@ app.put("/api/profile/resume", async (req, res) => {
   }
   const clean = (items: string[]) => [...new Set(items.map(item => item.trim()))];
   try {
-    const current = await prisma.candidateProfile.findUnique({ where: { id: "default" } });
     const data = {
       skillsJson: JSON.stringify(clean(body.skills)),
       educationJson: JSON.stringify(clean(body.education)),
