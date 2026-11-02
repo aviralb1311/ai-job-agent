@@ -16,7 +16,7 @@ describe("resume-to-job fit analysis", () => {
       location: "Remote - India",
       category: "BACKEND",
       skills: ["node.js", "python", "docker"],
-      description: "Required: Node.js. Python is preferred. Docker is a plus."
+      description: "Required: Node.js. Python is preferred. Docker is mentioned."
     }, profile, {
       skills: ["Node.js"],
       education: ["B.Tech Computer Science"],
