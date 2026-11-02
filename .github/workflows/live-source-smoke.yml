@@ -1,0 +1,35 @@
+name: Live public source smoke test
+
+on:
+  push:
+    branches: [phase-1.8-live-source-validation]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live-source-smoke:
+    name: Validate public Greenhouse, Lever and Ashby feeds
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.12.0
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Smoke test live public job boards through application connectors
+        run: npm run test:live-sources -w @job-agent/api
+        env:
+          GREENHOUSE_SMOKE_BOARD: stripe
+          LEVER_SMOKE_BOARD: everbridge
+          ASHBY_SMOKE_BOARD: plane
+          SOURCE_TIMEOUT_MS: 20000
