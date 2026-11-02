@@ -43,6 +43,14 @@ type SourcePreview = {
 };
 type CandidateProfile = { skills: string[]; preferredRoles: string[]; locations: string[]; remotePreference: "ANY" | "REMOTE" | "ONSITE" | "HYBRID" };
 type ResumeDraft = { skills: string[]; education: string[]; experience: string[]; projects: string[]; certifications: string[] };
+type JobFitAnalysis = {
+  score: number | null;
+  breakdown: { skills: { score: number | null; matched: number; total: number; weight: number }; role: { matched: boolean | null; weight: number }; location: { matched: boolean | null; weight: number } };
+  matchedSkills: string[]; missingSkills: string[]; requiredSkills: string[]; preferredSkills: string[];
+  otherMentionedSkills: string[]; missingRequiredSkills: string[]; missingPreferredSkills: string[];
+  evidence: Array<{ skill: string; sections: string[]; excerpts: string[] }>;
+  strengths: string[]; gaps: string[]; recommendations: string[]; disclaimer: string;
+};
 const EMPTY_PROFILE: CandidateProfile = { skills: [], preferredRoles: [], locations: [], remotePreference: "ANY" };
 const API = "http://localhost:4000";
 
@@ -77,6 +85,8 @@ export function App() {
   const [resumeDraft, setResumeDraft] = useState<ResumeDraft | null>(null);
   const [resumeBusy, setResumeBusy] = useState(false);
   const [resumeMessage, setResumeMessage] = useState("");
+  const [analysis, setAnalysis] = useState<{ jobId: string; data: JobFitAnalysis } | null>(null);
+  const [analysisBusy, setAnalysisBusy] = useState<string | null>(null);
 
   const loadJobs = useCallback(async (filters = { query, location, source }) => {
     setLoading(true);
@@ -136,6 +146,25 @@ export function App() {
     }
   }
 
+
+  async function analyzeFit(jobId: string) {
+    if (analysis?.jobId === jobId) {
+      setAnalysis(null);
+      return;
+    }
+    setAnalysisBusy(jobId);
+    setError("");
+    try {
+      const response = await fetch(`${API}/api/jobs/${encodeURIComponent(jobId)}/analyze`);
+      const body = await response.json() as { data?: JobFitAnalysis; error?: string; detail?: string };
+      if (!response.ok || !body.data) throw new Error(body.detail || body.error || "Could not analyze job fit");
+      setAnalysis({ jobId, data: body.data });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not analyze job fit");
+    } finally {
+      setAnalysisBusy(null);
+    }
+  }
 
   async function parseResume() {
     if (!resumeFile) return;
@@ -540,7 +569,29 @@ export function App() {
         </div>
         {!!job.skills?.length && <div className="skill-tags">{job.skills.slice(0, 8).map(skill => <span key={skill}>{skill}</span>)}</div>}
         {!!job.match?.matchedSkills.length && <p className="match-reason">Matched: {job.match.matchedSkills.join(", ")}</p>}
-        <a href={job.applicationUrl} target="_blank" rel="noreferrer">View original listing ↗</a>
+        <div className="job-actions">
+          <button className="small-action secondary" type="button" disabled={analysisBusy === job.id} onClick={() => void analyzeFit(job.id)}>
+            {analysisBusy === job.id ? "Analyzing…" : analysis?.jobId === job.id ? "Hide fit analysis" : "Analyze resume fit"}
+          </button>
+          <a href={job.applicationUrl} target="_blank" rel="noreferrer">View original listing ↗</a>
+        </div>
+        {analysis?.jobId === job.id && <div className="fit-analysis">
+          <div className="fit-analysis-top"><strong>Resume-to-job analysis</strong><span>{analysis.data.score === null ? "Add preferences to calculate a score" : `${analysis.data.score}% profile match`}</span></div>
+          <div className="fit-breakdown">
+            <span>Skills: {analysis.data.breakdown.skills.score === null ? "Not set" : `${analysis.data.breakdown.skills.score}%`} ({analysis.data.breakdown.skills.matched}/{analysis.data.breakdown.skills.total})</span>
+            <span>Role: {analysis.data.breakdown.role.matched === null ? "Not set" : analysis.data.breakdown.role.matched ? "Match" : "No match"}</span>
+            <span>Location: {analysis.data.breakdown.location.matched === null ? "Not set" : analysis.data.breakdown.location.matched ? "Match" : "No match"}</span>
+          </div>
+          {!!analysis.data.requiredSkills.length && <div><strong>Required skills detected</strong><p>{analysis.data.requiredSkills.join(", ")}</p></div>}
+          {!!analysis.data.preferredSkills.length && <div><strong>Preferred skills detected</strong><p>{analysis.data.preferredSkills.join(", ")}</p></div>}
+          {!!analysis.data.matchedSkills.length && <div><strong>Matching skills</strong><p className="fit-positive">{analysis.data.matchedSkills.join(", ")}</p></div>}
+          {!!analysis.data.missingRequiredSkills.length && <div><strong>Required skills not in your profile</strong><p className="fit-gap">{analysis.data.missingRequiredSkills.join(", ")}</p></div>}
+          {!!analysis.data.missingPreferredSkills.length && <div><strong>Preferred skills not in your profile</strong><p>{analysis.data.missingPreferredSkills.join(", ")}</p></div>}
+          {!!analysis.data.evidence.length && <div><strong>Resume evidence</strong>{analysis.data.evidence.map(item => <p key={item.skill}><b>{item.skill}</b> — {item.sections.length ? item.sections.join(", ") : "No saved section evidence"}{item.excerpts.length ? `: ${item.excerpts.join(" · ")}` : ""}</p>)}</div>}
+          {!!analysis.data.gaps.length && <div><strong>Gaps to review</strong><ul>{analysis.data.gaps.map(item => <li key={item}>{item}</li>)}</ul></div>}
+          {!!analysis.data.recommendations.length && <div><strong>Next steps</strong><ul>{analysis.data.recommendations.map(item => <li key={item}>{item}</li>)}</ul></div>}
+          <p className="fit-disclaimer">{analysis.data.disclaimer}</p>
+        </div>}
       </article>)}
       {!jobs.length && !loading && <div className="empty"><h3>No matching jobs</h3><p>Add public board IDs in Source Management, then sync job sources. You can also adjust your search filters.</p></div>}
       {loading && <div className="empty loading-state">Loading job opportunities…</div>}
