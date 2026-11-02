@@ -78,14 +78,5 @@ export const sourceCatalog: SourceCatalogEntry[] = [
     description: "Public Ashby board; previously listed an AI Engineer internship in Bengaluru.",
     careersUrl: "https://jobs.ashbyhq.com/Meraki-Labs",
     focus: "India · Bengaluru"
-  },
-  {
-    id: "evaratus-ashby",
-    provider: "ASHBY",
-    boardId: "evaratus",
-    displayName: "Evaratus",
-    description: "Public Ashby board; previously listed a software engineering internship in Bengaluru.",
-    careersUrl: "https://jobs.ashbyhq.com/evaratus",
-    focus: "India · Bengaluru"
   }
 ];
