@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import type { FormEvent } from "react";
 
 type Job = {
   id: string;
@@ -18,18 +19,44 @@ type SyncSummary = {
   duplicatesSkipped: number;
   errors: string[];
 };
+type Provider = "GREENHOUSE" | "LEVER" | "ASHBY";
+type JobSource = {
+  id: string;
+  provider: Provider;
+  boardId: string;
+  displayName: string | null;
+  enabled: boolean;
+  createdAt: string;
+};
+type SourcePreview = {
+  success: boolean;
+  provider: Provider;
+  boardId: string;
+  jobCount: number;
+  sample: Array<{ title: string; location: string | null; url: string }>;
+  error?: string;
+  detail?: string;
+};
 const API = "http://localhost:4000";
 
 export function App() {
   const [jobs, setJobs] = useState<Job[]>([]);
+  const [sources, setSources] = useState<JobSource[]>([]);
   const [query, setQuery] = useState("");
   const [location, setLocation] = useState("");
   const [source, setSource] = useState("");
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [sourcesLoading, setSourcesLoading] = useState(false);
+  const [savingSource, setSavingSource] = useState(false);
   const [error, setError] = useState("");
+  const [sourceMessage, setSourceMessage] = useState("");
   const [total, setTotal] = useState(0);
   const [syncSummary, setSyncSummary] = useState<SyncSummary | null>(null);
+  const [provider, setProvider] = useState<Provider>("GREENHOUSE");
+  const [boardId, setBoardId] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [preview, setPreview] = useState<SourcePreview | null>(null);
 
   const loadJobs = useCallback(async (filters = { query, location, source }) => {
     setLoading(true);
@@ -52,6 +79,20 @@ export function App() {
     }
   }, [query, location, source]);
 
+  const loadSources = useCallback(async () => {
+    setSourcesLoading(true);
+    try {
+      const response = await fetch(`${API}/api/sources`);
+      const body = await response.json() as { data?: JobSource[]; error?: string };
+      if (!response.ok) throw new Error(body.error || "Could not load configured sources");
+      setSources(body.data ?? []);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not load configured sources");
+    } finally {
+      setSourcesLoading(false);
+    }
+  }, []);
+
   async function sync() {
     setSyncing(true);
     setError("");
@@ -69,9 +110,79 @@ export function App() {
     }
   }
 
+  async function addAndValidateSource(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSavingSource(true);
+    setSourceMessage("");
+    setPreview(null);
+    setError("");
+    try {
+      const response = await fetch(`${API}/api/sources`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider, boardId: boardId.trim(), displayName: displayName.trim() })
+      });
+      const body = await response.json() as { data?: JobSource; error?: string; detail?: string };
+      if (!response.ok || !body.data) throw new Error(body.detail || body.error || "Could not add source");
+
+      const saved = body.data;
+      setSources(current => [saved, ...current]);
+      setBoardId("");
+      setDisplayName("");
+
+      const testResponse = await fetch(`${API}/api/sources/${saved.id}/test`, { method: "POST" });
+      const testBody = await testResponse.json() as SourcePreview;
+      if (!testResponse.ok || !testBody.success) {
+        setSourceMessage(`Source saved, but validation failed: ${testBody.detail || testBody.error || "Provider did not respond successfully"}`);
+      } else {
+        setPreview(testBody);
+        setSourceMessage(`Connected successfully. Found ${testBody.jobCount} public job postings.`);
+      }
+    } catch (e) {
+      setSourceMessage(e instanceof Error ? e.message : "Could not add source");
+    } finally {
+      setSavingSource(false);
+    }
+  }
+
+  async function toggleSource(item: JobSource) {
+    setError("");
+    try {
+      const response = await fetch(`${API}/api/sources/${item.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: !item.enabled })
+      });
+      const body = await response.json() as { data?: JobSource; error?: string };
+      if (!response.ok || !body.data) throw new Error(body.error || "Could not update source");
+      setSources(current => current.map(sourceItem => sourceItem.id === item.id ? body.data! : sourceItem));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not update source");
+    }
+  }
+
+  async function removeSource(item: JobSource) {
+    if (!window.confirm(`Remove ${item.displayName || item.boardId} from configured sources?`)) return;
+    setError("");
+    try {
+      const response = await fetch(`${API}/api/sources/${item.id}`, { method: "DELETE" });
+      if (!response.ok) {
+        const body = await response.json() as { error?: string };
+        throw new Error(body.error || "Could not remove source");
+      }
+      setSources(current => current.filter(sourceItem => sourceItem.id !== item.id));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not remove source");
+    }
+  }
+
   useEffect(() => {
     void loadJobs();
   }, [loadJobs]);
+
+  useEffect(() => {
+    void loadSources();
+  }, [loadSources]);
 
   const sourceCount = new Set(jobs.map(job => job.source)).size;
 
@@ -96,7 +207,47 @@ export function App() {
     <section className="metrics" aria-label="Job discovery metrics">
       <article className="metric"><span>Total matching jobs</span><strong>{total}</strong><small>Across connected boards</small></article>
       <article className="metric"><span>Sources represented</span><strong>{sourceCount}</strong><small>In the current result set</small></article>
-      <article className="metric"><span>Visible listings</span><strong>{jobs.length}</strong><small>Up to 100 per search</small></article>
+      <article className="metric"><span>Configured boards</span><strong>{sources.length}</strong><small>{sources.filter(item => item.enabled).length} enabled</small></article>
+    </section>
+
+    <section className="source-manager">
+      <div className="section-heading">
+        <div><span className="eyebrow-dark">SOURCE MANAGEMENT</span><h3>Company career boards</h3><p>Add public job boards and validate the connection before syncing.</p></div>
+        <button className="secondary" disabled={sourcesLoading} onClick={() => void loadSources()}>{sourcesLoading ? "Loading…" : "Refresh sources"}</button>
+      </div>
+      <form className="source-form" onSubmit={addAndValidateSource}>
+        <label>Provider
+          <select value={provider} onChange={e => setProvider(e.target.value as Provider)}>
+            <option value="GREENHOUSE">Greenhouse</option>
+            <option value="LEVER">Lever</option>
+            <option value="ASHBY">Ashby</option>
+          </select>
+        </label>
+        <label>Board ID
+          <input required minLength={1} maxLength={120} pattern="[a-zA-Z0-9._-]+" value={boardId} onChange={e => setBoardId(e.target.value)} placeholder="e.g. stripe" />
+        </label>
+        <label>Company display name
+          <input maxLength={120} value={displayName} onChange={e => setDisplayName(e.target.value)} placeholder="e.g. Stripe (optional)" />
+        </label>
+        <button type="submit" disabled={savingSource || !boardId.trim()}>{savingSource ? "Adding & testing…" : "Add & validate board"}</button>
+      </form>
+      <p className="form-hint">Use the provider's public board identifier, not a company name or a private careers URL. The source is saved even if its validation request fails, so you can correct or remove it.</p>
+
+      {sourceMessage && <div className={`source-message ${preview ? "success-message" : "warning-message"}`} role="status">{sourceMessage}</div>}
+      {preview && <div className="preview-panel">
+        <strong>Sample listings</strong>
+        {preview.sample.length ? preview.sample.map((item, index) => <div className="preview-row" key={index}><span>{item.title}</span><small>{item.location || "Location not specified"}</small></div>) : <small>The board is reachable but currently returned no jobs.</small>}
+      </div>}
+
+      <div className="source-list">
+        {sources.map(item => <article className="source-item" key={item.id}>
+          <div className="source-identity"><span className={`source source-${item.provider.toLowerCase()}`}>{item.provider}</span><strong>{item.displayName || item.boardId}</strong><small>Board ID: {item.boardId}</small></div>
+          <span className={item.enabled ? "enabled-label" : "disabled-label"}>{item.enabled ? "Enabled" : "Disabled"}</span>
+          <button className="small-action secondary" onClick={() => void toggleSource(item)}>{item.enabled ? "Disable" : "Enable"}</button>
+          <button className="small-action danger-action" onClick={() => void removeSource(item)}>Remove</button>
+        </article>)}
+        {!sources.length && !sourcesLoading && <div className="source-empty">No database-managed boards yet. Add your first public career board above.</div>}
+      </div>
     </section>
 
     <section className="toolbar">
@@ -129,7 +280,7 @@ export function App() {
         <p className="muted">{job.location || "Location not specified"} · {job.publishedAt ? new Date(job.publishedAt).toLocaleDateString() : "Publication date unavailable"}</p>
         <a href={job.applicationUrl} target="_blank" rel="noreferrer">View original listing ↗</a>
       </article>)}
-      {!jobs.length && !loading && <div className="empty"><h3>No matching jobs</h3><p>Configure public board IDs in the API environment file, then sync job sources. You can also adjust your search filters.</p></div>}
+      {!jobs.length && !loading && <div className="empty"><h3>No matching jobs</h3><p>Add public board IDs in Source Management, then sync job sources. You can also adjust your search filters.</p></div>}
       {loading && <div className="empty loading-state">Loading job opportunities…</div>}
     </section>
 
