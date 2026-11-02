@@ -37,6 +37,15 @@ model JobSource {
   @@unique([provider, boardId])
 }
 
+model CandidateProfile {
+  id               String   @id @default("default")
+  skillsJson       String   @default("[]")
+  preferredRoles   String   @default("[]")
+  locations        String   @default("[]")
+  remotePreference String   @default("ANY")
+  updatedAt        DateTime @updatedAt
+}
+
 model Job {
   id              String   @id @default(cuid())
   source          String
@@ -52,6 +61,8 @@ model Job {
   discoveredAt    DateTime @default(now())
   lastVerifiedAt  DateTime?
   status          String   @default("UNKNOWN")
+  category        String   @default("OTHER")
+  skillsJson      String   @default("[]")
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   @@unique([source, externalId])
