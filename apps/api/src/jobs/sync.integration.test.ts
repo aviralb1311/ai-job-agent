@@ -141,4 +141,50 @@ describe("job sync SQLite integration", () => {
     expect(stored).toHaveLength(1);
     expect(stored[0].source).toBe("ASHBY");
   });
+
+  it("serves explainable resume-to-job analysis from the stored candidate profile", async () => {
+    await prisma.candidateProfile.create({
+      data: {
+        id: "default",
+        skillsJson: JSON.stringify(["Node.js", "PostgreSQL"]),
+        preferredRoles: JSON.stringify(["BACKEND"]),
+        locations: "[]",
+        remotePreference: "REMOTE",
+        educationJson: JSON.stringify(["B.Tech Computer Science"]),
+        experienceJson: JSON.stringify(["Backend intern using Node.js"]),
+        projectsJson: JSON.stringify(["Expense tracker built with PostgreSQL"]),
+        certificationsJson: "[]"
+      }
+    });
+    const job = await prisma.job.create({
+      data: {
+        source: "GREENHOUSE",
+        externalId: "fit-analysis-1",
+        title: "Backend Engineer",
+        company: "Example Co",
+        location: "Remote - India",
+        description: "Required: Node.js. PostgreSQL experience preferred.",
+        applicationUrl: "https://jobs.example.test/backend",
+        canonicalUrl: "https://jobs.example.test/backend",
+        category: "BACKEND",
+        skillsJson: JSON.stringify(["node.js", "postgresql"])
+      }
+    });
+
+    const server = app.listen(0);
+    try {
+      await new Promise<void>(resolve => server.once("listening", resolve));
+      const address = server.address();
+      if (!address || typeof address === "string") throw new Error("Test server did not bind to a TCP port");
+      const response = await fetch(`http://127.0.0.1:${address.port}/api/jobs/${job.id}/analyze`);
+      const body = await response.json() as { data?: { score: number; matchedSkills: string[]; evidence: Array<{ skill: string; sections: string[] }> } };
+      expect(response.status).toBe(200);
+      expect(body.data?.score).toBe(100);
+      expect(body.data?.matchedSkills).toEqual(expect.arrayContaining(["Node.js", "PostgreSQL"]));
+      expect(body.data?.evidence.find(item => item.skill === "Node.js")?.sections).toContain("Experience");
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+    }
+  });
+
 });
