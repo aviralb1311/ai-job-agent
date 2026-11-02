@@ -6,6 +6,7 @@ import { previewSource, syncJobs } from "./jobs/service.js";
 import { sourceCatalog } from "./jobs/source-catalog.js";
 import { scoreJobMatch, type CandidatePreferences } from "./jobs/intelligence.js";
 import { parseResumeBuffer, ResumeParseError } from "./jobs/resume-parser.js";
+import { analyzeJobFit } from "./jobs/fit-analysis.js";
 
 export const app = express();
 app.use(cors({ origin: config.CORS_ORIGIN }));
@@ -205,6 +206,45 @@ app.get("/api/jobs", async (req, res) => {
     res.status(500).json({
       error: "Unable to retrieve jobs",
       detail: error instanceof Error ? error.message : "Unknown database error"
+    });
+  }
+});
+
+
+app.get("/api/jobs/:id/analyze", async (req, res) => {
+  try {
+    const job = await prisma.job.findUnique({ where: { id: req.params.id } });
+    if (!job) {
+      res.status(404).json({ error: "Job listing not found" });
+      return;
+    }
+    const profileRow = await prisma.candidateProfile.findUnique({ where: { id: "default" } });
+    const profile = parseProfile(profileRow);
+    const readSkills = (value: string): string[] => {
+      try {
+        const parsed: unknown = JSON.parse(value);
+        return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
+      } catch { return []; }
+    };
+    const resume = {
+      skills: readSkills(profileRow?.skillsJson ?? "[]"),
+      education: readSkills(profileRow?.educationJson ?? "[]"),
+      experience: readSkills(profileRow?.experienceJson ?? "[]"),
+      projects: readSkills(profileRow?.projectsJson ?? "[]"),
+      certifications: readSkills(profileRow?.certificationsJson ?? "[]")
+    };
+    const analysis = analyzeJobFit({
+      title: job.title,
+      location: job.location,
+      category: job.category,
+      skills: readSkills(job.skillsJson),
+      description: job.description
+    }, profile, resume);
+    res.json({ data: analysis });
+  } catch (error) {
+    res.status(500).json({
+      error: "Unable to analyze job fit",
+      detail: error instanceof Error ? error.message : "Unknown analysis error"
     });
   }
 });
