@@ -434,7 +434,7 @@ export function App() {
           {job.match?.score !== null && job.match?.score !== undefined && <span className="match-score">{job.match.score}% match</span>}
         </div>
         {!!job.skills?.length && <div className="skill-tags">{job.skills.slice(0, 8).map(skill => <span key={skill}>{skill}</span>)}</div>}
-        {!!job.match?.matchedSkills.length && <p className="match-reason">Matched: {job.match.matchedSkills.join(", ")}</p>
+        {!!job.match?.matchedSkills.length && <p className="match-reason">Matched: {job.match.matchedSkills.join(", ")}</p>}
         <a href={job.applicationUrl} target="_blank" rel="noreferrer">View original listing ↗</a>
       </article>)}
       {!jobs.length && !loading && <div className="empty"><h3>No matching jobs</h3><p>Add public board IDs in Source Management, then sync job sources. You can also adjust your search filters.</p></div>}
