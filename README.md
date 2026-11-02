@@ -54,3 +54,16 @@ GitHub Actions runs on pushes and pull requests targeting `main`. It installs fr
 - Do not scrape behind login, bypass CAPTCHA/MFA, or violate source terms.
 - Listings are marked `unknown` until verified; publication dates are not guessed.
 - Phase 1 only discovers and displays jobs. Applying is intentionally out of scope.
+
+## Live public-source smoke test
+
+The separate **Live public source smoke test** workflow exercises the actual application connectors against three public boards (Greenhouse `stripe`, Lever `everbridge`, and Ashby `plane`). It validates that each provider returns a non-empty feed, required job fields are present, and a sample can be normalized. The workflow is deliberately separate from normal CI because it depends on third-party public services and their live availability.
+
+Run it locally with:
+
+```bash
+npm ci
+npm run test:live-sources -w @job-agent/api
+```
+
+Optional board overrides: `GREENHOUSE_SMOKE_BOARD`, `LEVER_SMOKE_BOARD`, and `ASHBY_SMOKE_BOARD`. The smoke test reads public listings only; it never submits applications.
