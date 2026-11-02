@@ -28,7 +28,10 @@ export const ashbyConnector: JobConnector = {
   async fetchBoard(board: string): Promise<ProviderJob[]> {
     const url = `https://api.ashbyhq.com/posting-api/job-board/${encodeURIComponent(board)}?includeCompensation=true`;
     const response = await fetch(url, {
-      headers: { Accept: "application/json" },
+      headers: {
+        Accept: "application/json",
+        "User-Agent": "AIJobAgent/0.1 (public job board reader)"
+      },
       signal: AbortSignal.timeout(config.SOURCE_TIMEOUT_MS)
     });
 
