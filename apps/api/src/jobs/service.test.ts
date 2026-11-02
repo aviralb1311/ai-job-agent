@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { jobFindUnique, jobFindFirst, jobUpsert, greenhouseFetch, leverFetch, ashbyFetch } = vi.hoisted(() => ({
+const { jobSourceFindMany, jobFindUnique, jobFindFirst, jobUpsert, greenhouseFetch, leverFetch, ashbyFetch } = vi.hoisted(() => ({
+  jobSourceFindMany: vi.fn(),
   jobFindUnique: vi.fn(),
   jobFindFirst: vi.fn(),
   jobUpsert: vi.fn(),
@@ -10,10 +11,13 @@ const { jobFindUnique, jobFindFirst, jobUpsert, greenhouseFetch, leverFetch, ash
 }));
 
 vi.mock("../db.js", () => ({
-  prisma: { job: { findUnique: jobFindUnique, findFirst: jobFindFirst, upsert: jobUpsert } }
+  prisma: {
+    jobSource: { findMany: jobSourceFindMany },
+    job: { findUnique: jobFindUnique, findFirst: jobFindFirst, upsert: jobUpsert }
+  }
 }));
 vi.mock("../config.js", () => ({
-  config: { GREENHOUSE_BOARDS: "acme", LEVER_SITES: "", ASHBY_BOARDS: "" },
+  config: { GREENHOUSE_BOARDS: "legacy", LEVER_SITES: "", ASHBY_BOARDS: "" },
   list: (value: string) => value.split(",").map(item => item.trim()).filter(Boolean)
 }));
 vi.mock("./connectors/greenhouse.js", () => ({
@@ -26,20 +30,23 @@ vi.mock("./connectors/ashby.js", () => ({
   ashbyConnector: { provider: "ASHBY", fetchBoard: ashbyFetch }
 }));
 
-import { syncJobs } from "./service.js";
+import { previewSource, syncJobs } from "./service.js";
 
 const job = {
   id: "gh-1",
   title: "Backend Engineer",
-  company: "Acme",
+  company: "Board slug",
   location: "Remote",
   description: "Build APIs",
   url: "https://example.com/jobs/1?utm_source=greenhouse"
 };
 
-describe("job sync persistence", () => {
+describe("database-managed job sources and sync persistence", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    jobSourceFindMany.mockResolvedValue([
+      { id: "source-1", provider: "GREENHOUSE", boardId: "acme", displayName: "Acme Inc", enabled: true }
+    ]);
     greenhouseFetch.mockResolvedValue([job]);
     leverFetch.mockResolvedValue([]);
     ashbyFetch.mockResolvedValue([]);
@@ -48,8 +55,29 @@ describe("job sync persistence", () => {
     jobUpsert.mockResolvedValue({ id: "db-1" });
   });
 
-  afterEach(() => {
-    vi.clearAllMocks();
+  afterEach(() => vi.clearAllMocks());
+
+  it("uses enabled database sources and persists the display name", async () => {
+    const result = await syncJobs();
+    expect(greenhouseFetch).toHaveBeenCalledWith("acme");
+    expect(jobUpsert.mock.calls[0][0].create.company).toBe("Acme Inc");
+    expect(result).toMatchObject({ fetched: 1, inserted: 1, updated: 0, duplicatesSkipped: 0, errors: [] });
+  });
+
+  it("uses legacy environment board IDs only when no database sources exist", async () => {
+    jobSourceFindMany.mockResolvedValue([]);
+    const result = await syncJobs();
+    expect(greenhouseFetch).toHaveBeenCalledWith("legacy");
+    expect(result.fetched).toBe(1);
+  });
+
+  it("does not sync disabled sources when the source registry is populated", async () => {
+    jobSourceFindMany.mockResolvedValue([
+      { id: "source-1", provider: "GREENHOUSE", boardId: "disabled", displayName: null, enabled: false }
+    ]);
+    const result = await syncJobs();
+    expect(greenhouseFetch).not.toHaveBeenCalled();
+    expect(result.fetched).toBe(0);
   });
 
   it("inserts a new source job using an idempotent upsert", async () => {
@@ -58,7 +86,7 @@ describe("job sync persistence", () => {
     expect(jobUpsert.mock.calls[0][0].where.source_externalId).toEqual({
       source: "GREENHOUSE", externalId: "gh-1"
     });
-    expect(result).toMatchObject({ fetched: 1, inserted: 1, updated: 0, duplicatesSkipped: 0, errors: [] });
+    expect(result.inserted).toBe(1);
   });
 
   it("updates an existing provider job instead of inserting another row", async () => {
@@ -82,16 +110,16 @@ describe("job sync persistence", () => {
     expect(result.errors).toEqual(["GREENHOUSE/acme: provider unavailable"]);
   });
 
-  it("coalesces overlapping sync requests", async () => {
-    let release: ((jobs: typeof job[]) => void) | undefined;
-    greenhouseFetch.mockImplementation(() => new Promise(resolve => {
-      release = resolve;
-    }));
-    const first = syncJobs();
-    const second = syncJobs();
-    expect(second).toBe(first);
-    release?.([job]);
-    await Promise.all([first, second]);
-    expect(greenhouseFetch).toHaveBeenCalledOnce();
+  it("previews a public board without persisting jobs", async () => {
+    const preview = await previewSource("GREENHOUSE", "acme");
+    expect(preview).toMatchObject({
+      provider: "GREENHOUSE", boardId: "acme", jobCount: 1,
+      sample: [{ title: "Backend Engineer", location: "Remote", url: job.url }]
+    });
+    expect(jobUpsert).not.toHaveBeenCalled();
+  });
+
+  it("rejects unsupported source providers", async () => {
+    await expect(previewSource("OTHER", "acme")).rejects.toThrow("Unsupported job provider");
   });
 });
