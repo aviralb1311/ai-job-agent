@@ -66,3 +66,7 @@ npm run test:live-sources -w @job-agent/api
 - Do not scrape behind login, bypass CAPTCHA/MFA, or violate source terms.
 - Listings are marked `unknown` until verified; publication dates are not guessed.
 - Phase 1 only discovers and displays jobs. Applying is intentionally out of scope.
+
+## Starter source catalog
+
+The dashboard includes a curated set of public Greenhouse, Lever, and Ashby board identifiers discovered from employer career pages. They are convenience suggestions, not a guarantee that any job is currently open or that a particular role is suitable. Add a source from the catalog and validate it against the live provider before syncing. Board availability and role locations can change at any time.
