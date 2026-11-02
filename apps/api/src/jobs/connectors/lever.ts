@@ -20,7 +20,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function parseCreatedAt(value: LeverPosting["createdAt"]): string | null {
   if (value === null || value === undefined) return null;
-  const date = typeof value === "number" ? new Date(value) : new Date(value);
+  const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
@@ -40,7 +40,10 @@ export const leverConnector: JobConnector = {
   async fetchBoard(site: string): Promise<ProviderJob[]> {
     const url = `https://api.lever.co/v0/postings/${encodeURIComponent(site)}?mode=json`;
     const response = await fetch(url, {
-      headers: { Accept: "application/json" },
+      headers: {
+        Accept: "application/json",
+        "User-Agent": "AIJobAgent/0.1 (public job board reader)"
+      },
       signal: AbortSignal.timeout(config.SOURCE_TIMEOUT_MS)
     });
 
