@@ -128,7 +128,7 @@ export async function extractPdfText(buffer: Buffer): Promise<string> {
       }
       pages.push([...rows.entries()].sort((a, b) => b[0] - a[0]).map(([, parts]) => parts.join(" ")).join("\n"));
     }
-    return pages.join("\n").replace(/\s+/g, " ").trim().slice(0, MAX_TEXT_CHARS);
+    return pages.join("\n").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim().slice(0, MAX_TEXT_CHARS);
   } catch (error) {
     if (error instanceof ResumeParseError) throw error;
     throw new ResumeParseError("The PDF could not be read. Try exporting it again as a text-based PDF.");
