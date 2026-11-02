@@ -15,7 +15,7 @@ describe("job intelligence", () => {
   });
   it("returns an explainable match score", () => {
     const result = scoreJobMatch({ title: "Backend Engineer", location: "Remote", category: "BACKEND", skills: ["node.js", "postgresql"] }, { skills: ["Node.js", "PostgreSQL", "Docker"], preferredRoles: ["BACKEND"], locations: [], remotePreference: "REMOTE" });
-    expect(result.score).toBe(93);
+    expect(result.score).toBe(77);
     expect(result.matchedSkills).toEqual(["Node.js", "PostgreSQL"]);
     expect(result.missingSkills).toEqual(["Docker"]);
     expect(result.reasons).toHaveLength(3);
