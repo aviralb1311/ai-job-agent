@@ -11,6 +11,9 @@ type Job = {
   publishedAt: string | null;
   status: string;
   employmentType?: string;
+  category?: string;
+  skills?: string[];
+  match?: { score: number | null; matchedSkills: string[]; missingSkills: string[]; reasons: string[] };
 };
 type SyncSummary = {
   fetched: number;
@@ -38,6 +41,8 @@ type SourcePreview = {
   error?: string;
   detail?: string;
 };
+type CandidateProfile = { skills: string[]; preferredRoles: string[]; locations: string[]; remotePreference: "ANY" | "REMOTE" | "ONSITE" | "HYBRID" };
+const EMPTY_PROFILE: CandidateProfile = { skills: [], preferredRoles: [], locations: [], remotePreference: "ANY" };
 const API = "http://localhost:4000";
 
 export function App() {
@@ -60,6 +65,13 @@ export function App() {
   const [boardId, setBoardId] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [preview, setPreview] = useState<SourcePreview | null>(null);
+  const [profile, setProfile] = useState<CandidateProfile>(EMPTY_PROFILE);
+  const [profileSkills, setProfileSkills] = useState("");
+  const [profileRoles, setProfileRoles] = useState("");
+  const [profileLocations, setProfileLocations] = useState("");
+  const [remotePreference, setRemotePreference] = useState<CandidateProfile["remotePreference"]>("ANY");
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileMessage, setProfileMessage] = useState("");
 
   const loadJobs = useCallback(async (filters = { query, location, source }) => {
     setLoading(true);
@@ -81,6 +93,43 @@ export function App() {
       setLoading(false);
     }
   }, [query, location, source]);
+
+  const loadProfile = useCallback(async () => {
+    try {
+      const response = await fetch(`${API}/api/profile`);
+      const body = await response.json() as { data?: CandidateProfile; error?: string };
+      if (!response.ok || !body.data) throw new Error(body.error || "Could not load candidate profile");
+      setProfile(body.data);
+      setProfileSkills(body.data.skills.join(", "));
+      setProfileRoles(body.data.preferredRoles.join(", "));
+      setProfileLocations(body.data.locations.join(", "));
+      setRemotePreference(body.data.remotePreference);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not load candidate profile");
+    }
+  }, []);
+
+  async function saveProfile(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setProfileSaving(true);
+    setProfileMessage("");
+    try {
+      const split = (value: string) => value.split(",").map(item => item.trim()).filter(Boolean);
+      const payload = { skills: split(profileSkills), preferredRoles: split(profileRoles), locations: split(profileLocations), remotePreference };
+      const response = await fetch(`${API}/api/profile`, {
+        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
+      });
+      const body = await response.json() as { data?: CandidateProfile; error?: string; detail?: string };
+      if (!response.ok || !body.data) throw new Error(body.detail || body.error || "Could not save profile");
+      setProfile(body.data);
+      setProfileMessage("Preferences saved. Job match scores have been recalculated.");
+      await loadJobs();
+    } catch (e) {
+      setProfileMessage(e instanceof Error ? e.message : "Could not save profile");
+    } finally {
+      setProfileSaving(false);
+    }
+  }
 
   const loadCatalog = useCallback(async () => {
     setCatalogLoading(true);
@@ -234,7 +283,8 @@ export function App() {
 
   useEffect(() => {
     void loadSources();
-  }, [loadSources]);
+    void loadProfile();
+  }, [loadSources, loadProfile]);
 
   const sourceCount = new Set(jobs.map(job => job.source)).size;
 
@@ -260,6 +310,32 @@ export function App() {
       <article className="metric"><span>Total matching jobs</span><strong>{total}</strong><small>Across connected boards</small></article>
       <article className="metric"><span>Sources represented</span><strong>{sourceCount}</strong><small>In the current result set</small></article>
       <article className="metric"><span>Configured boards</span><strong>{sources.length}</strong><small>{sources.filter(item => item.enabled).length} enabled</small></article>
+    </section>
+
+    <section className="profile-section">
+      <div className="section-heading">
+        <div><span className="eyebrow-dark">YOUR CANDIDATE PROFILE</span><h3>What are you looking for?</h3><p>Set preferences to calculate transparent job relevance scores. No resume upload or AI API key is required.</p></div>
+        <span className="profile-status">{profile.skills.length + profile.preferredRoles.length + profile.locations.length ? "Profile configured" : "Not configured"}</span>
+      </div>
+      <form className="profile-form" onSubmit={saveProfile}>
+        <label>Skills (comma-separated)
+          <input value={profileSkills} onChange={e => setProfileSkills(e.target.value)} placeholder="Node.js, PostgreSQL, Docker, React" />
+        </label>
+        <label>Preferred role categories (comma-separated)
+          <input value={profileRoles} onChange={e => setProfileRoles(e.target.value)} placeholder="BACKEND, FULL_STACK, DEVOPS" />
+        </label>
+        <label>Preferred locations (comma-separated)
+          <input value={profileLocations} onChange={e => setProfileLocations(e.target.value)} placeholder="Kanpur, Noida, Bengaluru" />
+        </label>
+        <label>Work preference
+          <select value={remotePreference} onChange={e => setRemotePreference(e.target.value as CandidateProfile["remotePreference"])}>
+            <option value="ANY">Any work mode</option><option value="REMOTE">Remote</option><option value="HYBRID">Hybrid</option><option value="ONSITE">On-site</option>
+          </select>
+        </label>
+        <button type="submit" disabled={profileSaving}>{profileSaving ? "Saving…" : "Save preferences"}</button>
+      </form>
+      {profileMessage && <p className="profile-message" role="status">{profileMessage}</p>}
+      <p className="form-hint">Scores are deterministic heuristics: skills contribute 70%, role 20%, and location/work mode 10% when those preferences are set. They are guidance, not a hiring prediction.</p>
     </section>
 
     <section className="source-manager">
@@ -353,6 +429,12 @@ export function App() {
         <h3>{job.title}</h3>
         <p className="company">{job.company}</p>
         <p className="muted">{job.location || "Location not specified"} · {job.publishedAt ? new Date(job.publishedAt).toLocaleDateString() : "Publication date unavailable"}</p>
+        <div className="job-intelligence">
+          <span className="category-chip">{(job.category || "OTHER").replaceAll("_", " ")}</span>
+          {job.match?.score !== null && job.match?.score !== undefined && <span className="match-score">{job.match.score}% match</span>}
+        </div>
+        {!!job.skills?.length && <div className="skill-tags">{job.skills.slice(0, 8).map(skill => <span key={skill}>{skill}</span>)}</div>}
+        {!!job.match?.matchedSkills.length && <p className="match-reason">Matched: {job.match.matchedSkills.join(", ")}</p>
         <a href={job.applicationUrl} target="_blank" rel="noreferrer">View original listing ↗</a>
       </article>)}
       {!jobs.length && !loading && <div className="empty"><h3>No matching jobs</h3><p>Add public board IDs in Source Management, then sync job sources. You can also adjust your search filters.</p></div>}
