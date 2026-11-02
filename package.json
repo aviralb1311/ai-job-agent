@@ -1,0 +1,17 @@
+{
+  "name": "ai-job-agent",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": ["apps/api", "apps/web", "packages/shared"],
+  "scripts": {
+    "dev": "concurrently -n api,web -c blue,green \"npm run dev -w @job-agent/api\" \"npm run dev -w @job-agent/web\"",
+    "build": "npm run build -w @job-agent/shared && npm run build -w @job-agent/api && npm run build -w @job-agent/web",
+    "test": "npm run test -w @job-agent/api",
+    "db:generate": "npm run db:generate -w @job-agent/api",
+    "db:migrate": "npm run db:migrate -w @job-agent/api"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "typescript": "^5.7.3"
+  }
+}

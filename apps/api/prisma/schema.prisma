@@ -1,0 +1,79 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String       @id @default(cuid())
+  email     String       @unique
+  createdAt DateTime     @default(now())
+  profile   UserProfile?
+}
+
+model UserProfile {
+  id             String   @id @default(cuid())
+  userId         String   @unique
+  fullName       String?
+  education      String?
+  graduationYear Int?
+  skillsJson     String   @default("[]")
+  preferredRoles String   @default("[]")
+  locations      String   @default("[]")
+  remotePreference String @default("ANY")
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model JobSource {
+  id          String   @id @default(cuid())
+  provider    String
+  boardId     String
+  displayName String?
+  enabled     Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  @@unique([provider, boardId])
+}
+
+model Job {
+  id              String   @id @default(cuid())
+  source          String
+  externalId      String
+  title           String
+  company         String
+  location        String?
+  description     String
+  employmentType  String   @default("UNKNOWN")
+  applicationUrl  String
+  canonicalUrl    String
+  publishedAt     DateTime?
+  discoveredAt    DateTime @default(now())
+  lastVerifiedAt  DateTime?
+  status          String   @default("UNKNOWN")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  @@unique([source, externalId])
+  @@index([title])
+  @@index([company])
+  @@index([location])
+  @@index([publishedAt])
+}
+
+model SavedJob {
+  id        String   @id @default(cuid())
+  userId    String
+  jobId     String
+  createdAt DateTime @default(now())
+  @@unique([userId, jobId])
+  @@index([userId])
+}
+
+model SearchHistory {
+  id        String   @id @default(cuid())
+  userId    String?
+  query     String
+  filters   String   @default("{}")
+  createdAt DateTime @default(now())
+}
