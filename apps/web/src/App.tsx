@@ -42,6 +42,7 @@ type SourcePreview = {
   detail?: string;
 };
 type CandidateProfile = { skills: string[]; preferredRoles: string[]; locations: string[]; remotePreference: "ANY" | "REMOTE" | "ONSITE" | "HYBRID" };
+type ResumeDraft = { skills: string[]; education: string[]; experience: string[]; projects: string[]; certifications: string[] };
 const EMPTY_PROFILE: CandidateProfile = { skills: [], preferredRoles: [], locations: [], remotePreference: "ANY" };
 const API = "http://localhost:4000";
 
@@ -72,6 +73,10 @@ export function App() {
   const [remotePreference, setRemotePreference] = useState<CandidateProfile["remotePreference"]>("ANY");
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileMessage, setProfileMessage] = useState("");
+  const [resumeFile, setResumeFile] = useState<File | null>(null);
+  const [resumeDraft, setResumeDraft] = useState<ResumeDraft | null>(null);
+  const [resumeBusy, setResumeBusy] = useState(false);
+  const [resumeMessage, setResumeMessage] = useState("");
 
   const loadJobs = useCallback(async (filters = { query, location, source }) => {
     setLoading(true);
@@ -128,6 +133,63 @@ export function App() {
       setProfileMessage(e instanceof Error ? e.message : "Could not save profile");
     } finally {
       setProfileSaving(false);
+    }
+  }
+
+
+  async function parseResume() {
+    if (!resumeFile) return;
+    setResumeBusy(true);
+    setResumeMessage("");
+    setResumeDraft(null);
+    try {
+      const contentType = resumeFile.type || (resumeFile.name.toLowerCase().endsWith(".pdf")
+        ? "application/pdf"
+        : "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+      const response = await fetch(`${API}/api/resume/parse`, {
+        method: "POST",
+        headers: { "Content-Type": contentType },
+        body: resumeFile
+      });
+      const body = await response.json() as { data?: ResumeDraft; error?: string };
+      if (!response.ok || !body.data) throw new Error(body.error || "Could not parse resume");
+      setResumeDraft(body.data);
+      setResumeMessage("Extraction complete. Review every field below; nothing has been saved yet.");
+    } catch (e) {
+      setResumeMessage(e instanceof Error ? e.message : "Resume parsing failed");
+    } finally {
+      setResumeBusy(false);
+    }
+  }
+
+  function updateResumeSection(section: keyof ResumeDraft, value: string) {
+    if (!resumeDraft) return;
+    const items = section === "skills"
+      ? value.split(",").map(item => item.trim()).filter(Boolean)
+      : value.split("\\n").map(item => item.trim()).filter(Boolean);
+    setResumeDraft(current => current ? { ...current, [section]: items } : current);
+  }
+
+  async function saveResume() {
+    if (!resumeDraft) return;
+    setResumeBusy(true);
+    setResumeMessage("");
+    try {
+      const response = await fetch(`${API}/api/profile/resume`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(resumeDraft)
+      });
+      const body = await response.json() as { data?: ResumeDraft; error?: string; detail?: string };
+      if (!response.ok || !body.data) throw new Error(body.detail || body.error || "Could not save reviewed resume");
+      setResumeDraft(body.data);
+      setResumeMessage("Reviewed resume details saved to your local candidate profile.");
+      await loadProfile();
+      await loadJobs();
+    } catch (e) {
+      setResumeMessage(e instanceof Error ? e.message : "Could not save reviewed resume");
+    } finally {
+      setResumeBusy(false);
     }
   }
 
@@ -336,6 +398,40 @@ export function App() {
       </form>
       {profileMessage && <p className="profile-message" role="status">{profileMessage}</p>}
       <p className="form-hint">Scores are deterministic heuristics: skills contribute 70%, role 20%, and location/work mode 10% when those preferences are set. They are guidance, not a hiring prediction.</p>
+    </section>
+
+
+    <section className="resume-section">
+      <div className="section-heading">
+        <div><span className="eyebrow-dark">RESUME INTELLIGENCE</span><h3>Extract your verified experience</h3><p>Upload a text-based PDF or DOCX (max 5 MB). Extraction runs locally through this API; your file is not retained or sent to an AI provider.</p></div>
+      </div>
+      <div className="resume-upload">
+        <label>Resume file
+          <input type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={event => { setResumeFile(event.target.files?.[0] ?? null); setResumeDraft(null); setResumeMessage(""); }} />
+        </label>
+        <button type="button" disabled={!resumeFile || resumeBusy} onClick={() => void parseResume()}>{resumeBusy ? "Processing…" : "Parse resume"}</button>
+      </div>
+      {resumeMessage && <p className="resume-message" role="status">{resumeMessage}</p>}
+      {resumeDraft && <div className="resume-review">
+        <div className="resume-review-heading"><strong>Review extracted information</strong><span>Editable · Not saved until you approve</span></div>
+        <label>Skills (comma-separated)
+          <textarea rows={3} value={resumeDraft.skills.join(", ")} onChange={event => updateResumeSection("skills", event.target.value)} />
+        </label>
+        <label>Education (one entry per line)
+          <textarea rows={3} value={resumeDraft.education.join("\\n")} onChange={event => updateResumeSection("education", event.target.value)} placeholder="No education entries detected" />
+        </label>
+        <label>Experience (one entry per line)
+          <textarea rows={4} value={resumeDraft.experience.join("\\n")} onChange={event => updateResumeSection("experience", event.target.value)} placeholder="No experience entries detected" />
+        </label>
+        <label>Projects (one entry per line)
+          <textarea rows={3} value={resumeDraft.projects.join("\\n")} onChange={event => updateResumeSection("projects", event.target.value)} placeholder="No projects detected" />
+        </label>
+        <label>Certifications (one entry per line)
+          <textarea rows={2} value={resumeDraft.certifications.join("\\n")} onChange={event => updateResumeSection("certifications", event.target.value)} placeholder="No certifications detected" />
+        </label>
+        <button type="button" disabled={resumeBusy} onClick={() => void saveResume()}>{resumeBusy ? "Saving…" : "Approve & save to profile"}</button>
+      </div>}
+      <p className="form-hint">Extraction is heuristic and may miss sections, especially in multi-column or scanned resumes. Review and correct all entries. Scanned-image OCR is not included. Uploads are processed in memory and are not stored as files.</p>
     </section>
 
     <section className="source-manager">
