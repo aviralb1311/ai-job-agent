@@ -29,7 +29,8 @@ export function analyzeJob(title: string, description: string): JobIntelligence 
   const text = (title + " " + description).toLowerCase().replace(/<[^>]*>/g, " ");
   const skills = SKILL_KEYWORDS.filter(skill => {
     const escaped = skill.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    return new RegExp("(^|[^a-z0-9+#])" + escaped + "($|[^a-z0-9+#])", "i").test(text);
+    const pattern = skill === "rest api" ? "rest apis?" : escaped;
+    return new RegExp("(^|[^a-z0-9+#])" + pattern + "($|[^a-z0-9+#])", "i").test(text);
   });
   const category = categoryRules.find(([, pattern]) => pattern.test(title.toLowerCase()))?.[0] ?? "OTHER";
   return { category, skills: [...skills] };
