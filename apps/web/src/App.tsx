@@ -166,7 +166,7 @@ export function App() {
     if (!resumeDraft) return;
     const items = section === "skills"
       ? value.split(",").map(item => item.trim()).filter(Boolean)
-      : value.split("\\n").map(item => item.trim()).filter(Boolean);
+      : value.split(String.fromCharCode(10)).map(item => item.trim()).filter(Boolean);
     setResumeDraft(current => current ? { ...current, [section]: items } : current);
   }
 
@@ -346,6 +346,15 @@ export function App() {
   useEffect(() => {
     void loadSources();
     void loadProfile();
+    void (async () => {
+      try {
+        const response = await fetch(`${API}/api/profile/resume`);
+        const body = await response.json() as { data?: ResumeDraft };
+        if (response.ok && body.data) setResumeDraft(body.data);
+      } catch {
+        // Resume details are optional; profile preferences remain usable.
+      }
+    })();
   }, [loadSources, loadProfile]);
 
   const sourceCount = new Set(jobs.map(job => job.source)).size;
