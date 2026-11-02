@@ -6,14 +6,15 @@ A human-in-the-loop job discovery platform. Phase 1 establishes the application 
 - Express + TypeScript API
 - React + Vite + TypeScript frontend
 - Prisma + SQLite for local development
-- Greenhouse and Lever public-board connectors (configured by board/company identifiers)
-- Ashby connector (configured by job board name)
+- Greenhouse, Lever and Ashby public-board connectors (configured by board/company identifiers)
 - Job normalization, source attribution, URL-based deduplication, filtering
 - No auto-apply, credential collection, or AI-generated match scores in Phase 1
 
 ## Requirements
-- Node.js 20+
+- Node.js 22.12+
 - npm 10+
+
+Vitest 5 requires Node.js 22.12 or newer.
 
 ## Setup
 ```bash
@@ -23,6 +24,7 @@ npm run db:generate
 npm run db:migrate
 npm run dev
 ```
+
 Frontend: http://localhost:5173  
 API: http://localhost:4000  
 Health: http://localhost:4000/api/health
@@ -42,6 +44,9 @@ These are public board identifiers, not arbitrary company names. Check each prov
 - `npm run test` — run API tests
 - `npm run db:generate` — generate Prisma client
 - `npm run db:migrate` — create/apply local migration
+
+## Continuous integration
+GitHub Actions runs on pushes and pull requests targeting `main`. It installs from the lockfile, generates Prisma Client, builds all workspaces, runs API tests, and checks dependencies with `npm audit`.
 
 ## Safety and product boundaries
 - Job descriptions and remote pages are untrusted data.
