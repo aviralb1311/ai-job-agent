@@ -17,6 +17,7 @@ vi.mock("./connectors/ashby.js", () => ({
 }));
 
 import { prisma } from "../db.js";
+import { app } from "../app.js";
 import { syncJobs } from "./service.js";
 
 const greenhouseJob = {
@@ -42,6 +43,7 @@ describe("job sync SQLite integration", () => {
     await prisma.savedJob.deleteMany();
     await prisma.job.deleteMany();
     await prisma.jobSource.deleteMany();
+    await prisma.candidateProfile.deleteMany();
 
     greenhouseFetch.mockReset().mockResolvedValue([greenhouseJob]);
     leverFetch.mockReset().mockResolvedValue([]);
@@ -52,6 +54,7 @@ describe("job sync SQLite integration", () => {
     await prisma.savedJob.deleteMany();
     await prisma.job.deleteMany();
     await prisma.jobSource.deleteMany();
+    await prisma.candidateProfile.deleteMany();
     await prisma.$disconnect();
   });
 
