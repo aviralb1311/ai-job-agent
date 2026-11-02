@@ -7,6 +7,7 @@ import { sourceCatalog } from "./jobs/source-catalog.js";
 import { scoreJobMatch, type CandidatePreferences } from "./jobs/intelligence.js";
 import { parseResumeBuffer, ResumeParseError } from "./jobs/resume-parser.js";
 import { analyzeJobFit } from "./jobs/fit-analysis.js";
+import { generateApplicationDraft } from "./jobs/application-draft.js";
 
 export const app = express();
 app.use(cors({ origin: config.CORS_ORIGIN }));
@@ -246,6 +247,135 @@ app.get("/api/jobs/:id/analyze", async (req, res) => {
       error: "Unable to analyze job fit",
       detail: error instanceof Error ? error.message : "Unknown analysis error"
     });
+  }
+});
+
+
+function serializeApplicationDraft(draft: {
+  id: string; jobId: string; resumeSummary: string; highlightsJson: string; coverLetter: string;
+  reviewNotesJson: string; status: string; reviewedAt: Date | null; createdAt: Date; updatedAt: Date;
+}) {
+  return {
+    id: draft.id,
+    jobId: draft.jobId,
+    resumeSummary: draft.resumeSummary,
+    highlights: readJsonList(draft.highlightsJson),
+    coverLetter: draft.coverLetter,
+    reviewNotes: readJsonList(draft.reviewNotesJson),
+    status: draft.status,
+    reviewedAt: draft.reviewedAt,
+    createdAt: draft.createdAt,
+    updatedAt: draft.updatedAt
+  };
+}
+
+app.get("/api/jobs/:id/application-draft", async (req, res) => {
+  try {
+    const job = await prisma.job.findUnique({ where: { id: req.params.id }, select: { id: true } });
+    if (!job) {
+      res.status(404).json({ error: "Job listing not found" });
+      return;
+    }
+    const draft = await prisma.applicationDraft.findUnique({ where: { jobId: job.id } });
+    res.json({ data: draft ? serializeApplicationDraft(draft) : null });
+  } catch (error) {
+    res.status(500).json({ error: "Unable to retrieve application draft", detail: error instanceof Error ? error.message : "Unknown error" });
+  }
+});
+
+app.post("/api/jobs/:id/application-draft", async (req, res) => {
+  try {
+    const job = await prisma.job.findUnique({ where: { id: req.params.id } });
+    if (!job) {
+      res.status(404).json({ error: "Job listing not found" });
+      return;
+    }
+    const existing = await prisma.applicationDraft.findUnique({ where: { jobId: job.id } });
+    if (existing) {
+      res.status(409).json({ error: "An application draft already exists. Load and edit it instead of overwriting your changes.", data: serializeApplicationDraft(existing) });
+      return;
+    }
+    const profileRow = await prisma.candidateProfile.findUnique({ where: { id: "default" } });
+    const profile = parseProfile(profileRow);
+    const resume = {
+      skills: readJsonList(profileRow?.skillsJson ?? "[]"),
+      education: readJsonList(profileRow?.educationJson ?? "[]"),
+      experience: readJsonList(profileRow?.experienceJson ?? "[]"),
+      projects: readJsonList(profileRow?.projectsJson ?? "[]"),
+      certifications: readJsonList(profileRow?.certificationsJson ?? "[]")
+    };
+    const generated = generateApplicationDraft({
+      job: {
+        title: job.title, company: job.company, location: job.location, category: job.category,
+        skills: readJsonList(job.skillsJson), description: job.description
+      },
+      profile,
+      resume
+    });
+    const draft = await prisma.applicationDraft.create({
+      data: {
+        jobId: job.id,
+        resumeSummary: generated.resumeSummary,
+        highlightsJson: JSON.stringify(generated.highlights),
+        coverLetter: generated.coverLetter,
+        reviewNotesJson: JSON.stringify(generated.reviewNotes)
+      }
+    });
+    res.status(201).json({ data: serializeApplicationDraft(draft) });
+  } catch (error) {
+    if (typeof error === "object" && error !== null && "code" in error && error.code === "P2002") {
+      res.status(409).json({ error: "An application draft already exists for this job. Load it to preserve your edits." });
+      return;
+    }
+    res.status(500).json({ error: "Unable to generate application draft", detail: error instanceof Error ? error.message : "Unknown error" });
+  }
+});
+
+app.put("/api/jobs/:id/application-draft", async (req, res) => {
+  const body = req.body ?? {};
+  const validHighlights = Array.isArray(body.highlights) && body.highlights.length <= 10 &&
+    body.highlights.every((item: unknown) => typeof item === "string" && item.trim().length > 0 && item.length <= 500);
+  if (typeof body.resumeSummary !== "string" || body.resumeSummary.length > 5000 ||
+      typeof body.coverLetter !== "string" || body.coverLetter.length > 12000 || !validHighlights) {
+    res.status(400).json({ error: "resumeSummary and coverLetter must be text within size limits; highlights must be up to 10 non-empty strings (500 characters max)." });
+    return;
+  }
+  try {
+    const existing = await prisma.applicationDraft.findUnique({ where: { jobId: req.params.id } });
+    if (!existing) {
+      res.status(404).json({ error: "Application draft not found. Generate it first." });
+      return;
+    }
+    const saved = await prisma.applicationDraft.update({
+      where: { jobId: req.params.id },
+      data: {
+        resumeSummary: body.resumeSummary,
+        highlightsJson: JSON.stringify([...new Set(body.highlights.map((item: string) => item.trim()))]),
+        coverLetter: body.coverLetter,
+        status: "DRAFT",
+        reviewedAt: null
+      }
+    });
+    res.json({ data: serializeApplicationDraft(saved) });
+  } catch (error) {
+    res.status(500).json({ error: "Unable to save application draft", detail: error instanceof Error ? error.message : "Unknown error" });
+  }
+});
+
+app.post("/api/jobs/:id/application-draft/review", async (req, res) => {
+  try {
+    const existing = await prisma.applicationDraft.findUnique({ where: { jobId: req.params.id } });
+    if (!existing) {
+      res.status(404).json({ error: "Application draft not found. Generate it first." });
+      return;
+    }
+    const saved = await prisma.applicationDraft.update({
+      where: { jobId: req.params.id },
+      data: { status: "REVIEWED", reviewedAt: new Date() }
+    });
+    res.json({ data: serializeApplicationDraft(saved), message: "Marked reviewed for manual use only. No application was submitted." });
+  } catch (error) {
+    res.status(500).json({ error: "Unable to mark application draft reviewed", detail: error instanceof Error ? error.message : "Unknown error" });
   }
 });
 
