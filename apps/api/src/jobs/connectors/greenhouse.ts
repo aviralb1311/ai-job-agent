@@ -7,6 +7,7 @@ interface GreenhouseJob {
   absolute_url?: string;
   content?: string | null;
   location?: { name?: string | null } | null;
+  first_published?: string | null;
   custom_fields?: Array<{ name?: string; value?: unknown }>;
 }
 
@@ -16,6 +17,12 @@ interface GreenhouseResponse {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function parsePublishedAt(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
 function getEmploymentType(fields: GreenhouseJob["custom_fields"]): string | null {
@@ -33,7 +40,10 @@ export const greenhouseConnector: JobConnector = {
   async fetchBoard(boardId: string): Promise<ProviderJob[]> {
     const url = `https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(boardId)}/jobs?content=true`;
     const response = await fetch(url, {
-      headers: { Accept: "application/json" },
+      headers: {
+        Accept: "application/json",
+        "User-Agent": "AIJobAgent/0.1 (public job board reader)"
+      },
       signal: AbortSignal.timeout(config.SOURCE_TIMEOUT_MS)
     });
 
@@ -61,8 +71,7 @@ export const greenhouseConnector: JobConnector = {
         location: typeof job.location?.name === "string" ? job.location.name : null,
         description: typeof job.content === "string" ? job.content : "",
         url: job.absolute_url!,
-        // Greenhouse's updated_at is not a publication timestamp; do not infer one.
-        publishedAt: null,
+        publishedAt: parsePublishedAt(job.first_published),
         employmentType: getEmploymentType(job.custom_fields)
       }))
       .filter(job => job.title.length > 0);
