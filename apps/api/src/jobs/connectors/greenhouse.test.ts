@@ -10,9 +10,7 @@ function jsonResponse(body: unknown, status = 200) {
 }
 
 describe("Greenhouse connector", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
+  afterEach(() => vi.unstubAllGlobals());
 
   it("fetches and maps public job-board postings", async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
@@ -22,11 +20,11 @@ describe("Greenhouse connector", () => {
         absolute_url: "https://boards.greenhouse.io/acme/jobs/123",
         content: "<p>Build APIs</p>",
         location: { name: "Remote - India" },
-        updated_at: "2026-10-30T10:00:00Z"
+        first_published: "2026-10-30T10:00:00Z",
+        updated_at: "2026-10-31T10:00:00Z"
       }]
     }));
     vi.stubGlobal("fetch", fetchMock);
-
     const jobs = await greenhouseConnector.fetchBoard("acme");
 
     expect(fetchMock).toHaveBeenCalledOnce();
@@ -38,7 +36,7 @@ describe("Greenhouse connector", () => {
       location: "Remote - India",
       description: "<p>Build APIs</p>",
       url: "https://boards.greenhouse.io/acme/jobs/123",
-      publishedAt: null,
+      publishedAt: "2026-10-30T10:00:00.000Z",
       employmentType: null
     }]);
   });
@@ -50,13 +48,8 @@ describe("Greenhouse connector", () => {
 
   it("safely handles missing optional fields", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({
-      jobs: [{
-        id: "job-1",
-        title: "Platform Engineer",
-        absolute_url: "https://example.com/jobs/1"
-      }]
+      jobs: [{ id: "job-1", title: "Platform Engineer", absolute_url: "https://example.com/jobs/1" }]
     })));
-
     const [job] = await greenhouseConnector.fetchBoard("example");
     expect(job.location).toBeNull();
     expect(job.description).toBe("");
@@ -73,7 +66,6 @@ describe("Greenhouse connector", () => {
         { id: 2, title: "   ", absolute_url: "https://example.com/blank" }
       ]
     })));
-
     const jobs = await greenhouseConnector.fetchBoard("example");
     expect(jobs).toHaveLength(1);
     expect(jobs[0].id).toBe("valid");
@@ -93,7 +85,6 @@ describe("Greenhouse connector", () => {
 
   it("propagates network failures for the sync service to record", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network unavailable")));
-    await expect(greenhouseConnector.fetchBoard("offline"))
-      .rejects.toThrow("network unavailable");
+    await expect(greenhouseConnector.fetchBoard("offline")).rejects.toThrow("network unavailable");
   });
 });
