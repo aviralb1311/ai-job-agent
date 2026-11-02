@@ -41,7 +41,7 @@ function skillPattern(skill: string): RegExp {
 
 function classifyRequirements(description: string, skills: string[]) {
   const plain = description.replace(/<[^>]*>/g, " ").replace(/&nbsp;/gi, " ");
-  const sentences = plain.split(/[!?;\n•]+|\\.(?=\\s+[A-Z])/ ).map(item => item.trim()).filter(Boolean);
+  const sentences = plain.split(/[!?;\n•]+|\.(?=\s+[A-Z])/).map(item => item.trim()).filter(Boolean);
   const required: string[] = [];
   const preferred: string[] = [];
   const mentioned: string[] = [];
