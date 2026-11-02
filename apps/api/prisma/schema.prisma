@@ -67,6 +67,7 @@ model Job {
   status          String   @default("UNKNOWN")
   category        String   @default("OTHER")
   skillsJson      String   @default("[]")
+  applicationDraft ApplicationDraft?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   @@unique([source, externalId])
@@ -91,4 +92,19 @@ model SearchHistory {
   query     String
   filters   String   @default("{}")
   createdAt DateTime @default(now())
+}
+
+
+model ApplicationDraft {
+  id             String   @id @default(cuid())
+  jobId          String   @unique
+  resumeSummary  String   @default("")
+  highlightsJson String   @default("[]")
+  coverLetter    String   @default("")
+  reviewNotesJson String  @default("[]")
+  status         String   @default("DRAFT")
+  reviewedAt     DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  job            Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
 }

@@ -187,4 +187,72 @@ describe("job sync SQLite integration", () => {
     }
   });
 
+
+  it("creates, edits and marks an application draft reviewed without submitting it", async () => {
+    await prisma.candidateProfile.create({
+      data: {
+        id: "default",
+        skillsJson: JSON.stringify(["Node.js", "PostgreSQL"]),
+        preferredRoles: JSON.stringify(["BACKEND"]),
+        locations: "[]",
+        remotePreference: "REMOTE",
+        educationJson: JSON.stringify(["B.Tech Computer Science"]),
+        experienceJson: JSON.stringify(["Built Node.js APIs"]),
+        projectsJson: JSON.stringify(["Expense tracker using PostgreSQL"]),
+        certificationsJson: "[]"
+      }
+    });
+    const job = await prisma.job.create({
+      data: {
+        source: "GREENHOUSE",
+        externalId: "application-draft-1",
+        title: "Backend Engineer",
+        company: "Example Co",
+        location: "Remote",
+        description: "Node.js and PostgreSQL",
+        applicationUrl: "https://jobs.example.test/backend",
+        canonicalUrl: "https://jobs.example.test/backend",
+        category: "BACKEND",
+        skillsJson: JSON.stringify(["node.js", "postgresql"])
+      }
+    });
+    const server = app.listen(0);
+    try {
+      await new Promise<void>(resolve => server.once("listening", resolve));
+      const address = server.address();
+      if (!address || typeof address === "string") throw new Error("Test server did not bind to a TCP port");
+      const base = `http://127.0.0.1:${address.port}/api/jobs/${job.id}/application-draft`;
+      const createdResponse = await fetch(base, { method: "POST" });
+      const created = await createdResponse.json() as { data?: { id: string; status: string; coverLetter: string }; error?: string };
+      expect(createdResponse.status).toBe(201);
+      expect(created.data?.status).toBe("DRAFT");
+      expect(created.data?.coverLetter).toContain("Node.js");
+
+      const duplicateResponse = await fetch(base, { method: "POST" });
+      expect(duplicateResponse.status).toBe(409);
+
+      const updateResponse = await fetch(base, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          resumeSummary: "Edited summary with verified project details.",
+          highlights: ["Built Node.js APIs"],
+          coverLetter: "Edited cover letter for manual review."
+        })
+      });
+      const updated = await updateResponse.json() as { data?: { status: string; coverLetter: string } };
+      expect(updateResponse.status).toBe(200);
+      expect(updated.data).toMatchObject({ status: "DRAFT", coverLetter: "Edited cover letter for manual review." });
+
+      const reviewResponse = await fetch(base + "/review", { method: "POST" });
+      const reviewed = await reviewResponse.json() as { data?: { status: string; reviewedAt: string | null }; message?: string };
+      expect(reviewResponse.status).toBe(200);
+      expect(reviewed.data?.status).toBe("REVIEWED");
+      expect(reviewed.data?.reviewedAt).toBeTruthy();
+      expect(reviewed.message).toMatch(/No application was submitted/);
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+    }
+  });
+
 });
