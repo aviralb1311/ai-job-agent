@@ -118,7 +118,15 @@ export async function extractPdfText(buffer: Buffer): Promise<string> {
     for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber++) {
       const page = await document.getPage(pageNumber);
       const content = await page.getTextContent();
-      pages.push(content.items.map(item => "str" in item ? item.str : "").filter(Boolean).join(" "));
+      const rows = new Map<number, string[]>();
+      for (const item of content.items) {
+        if (!("str" in item) || !item.str.trim()) continue;
+        const y = Math.round(item.transform[5] / 2) * 2;
+        const row = rows.get(y) ?? [];
+        row.push(item.str);
+        rows.set(y, row);
+      }
+      pages.push([...rows.entries()].sort((a, b) => b[0] - a[0]).map(([, parts]) => parts.join(" ")).join("\n"));
     }
     return pages.join("\n").replace(/\s+/g, " ").trim().slice(0, MAX_TEXT_CHARS);
   } catch (error) {
