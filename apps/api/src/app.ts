@@ -2,7 +2,8 @@ import express from "express";
 import cors from "cors";
 import { config } from "./config.js";
 import { prisma } from "./db.js";
-import { getConnector, previewSource, syncJobs } from "./jobs/service.js";
+import { previewSource, syncJobs } from "./jobs/service.js";
+import { sourceCatalog } from "./jobs/source-catalog.js";
 
 export const app = express();
 app.use(cors({ origin: config.CORS_ORIGIN }));
@@ -51,6 +52,10 @@ app.get("/api/jobs", async (req, res) => {
       detail: error instanceof Error ? error.message : "Unknown database error"
     });
   }
+});
+
+app.get("/api/sources/catalog", (_req, res) => {
+  res.json({ data: sourceCatalog });
 });
 
 app.get("/api/sources", async (_req, res) => {
