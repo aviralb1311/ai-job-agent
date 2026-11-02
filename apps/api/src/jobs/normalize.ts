@@ -25,14 +25,20 @@ export function normalizeJob(provider: string, raw: ProviderJob): NormalizedJob 
   };
 }
 
+/**
+ * Produces a stable URL key for cross-provider duplicate detection.
+ * Tracking parameters and fragments are ignored; meaningful query parameters remain.
+ */
 export function canonicalizeUrl(value: string): string {
   try {
-    const url = new URL(value);
+    const url = new URL(value.trim());
     url.hash = "";
     for (const key of [...url.searchParams.keys()]) {
-      if (/^(utm_|gh_src|source)/i.test(key)) url.searchParams.delete(key);
+      if (/^(utm_.+|gh_src|source)$/i.test(key)) url.searchParams.delete(key);
     }
-    return url.toString().replace(/\/$/, "");
+    url.searchParams.sort();
+    url.pathname = url.pathname.replace(/\/+$/, "") || "/";
+    return url.toString().replace(/\/$/, url.search ? "/" : "");
   } catch {
     return value.trim();
   }
