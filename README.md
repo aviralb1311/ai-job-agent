@@ -66,3 +66,7 @@ npm run test:live-sources -w @job-agent/api
 - Do not scrape behind login, bypass CAPTCHA/MFA, or violate source terms.
 - Listings are marked `unknown` until verified; publication dates are not guessed.
 - Phase 1 only discovers and displays jobs. Applying is intentionally out of scope.
+
+## Starter source catalog
+
+The API exposes a starter catalog of candidate Greenhouse, Lever, and Ashby board identifiers at `GET /api/sources/catalog`. These are suggestions only: they are not pre-validated, are not automatically added, and may become stale. Add a source and use the live validation action before syncing; do not treat a catalog entry as proof that a board is currently active or has suitable openings.
