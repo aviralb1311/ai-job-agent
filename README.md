@@ -178,3 +178,11 @@ The API exposes a starter catalog of candidate Greenhouse, Lever, and Ashby boar
 - The API supports optional `limit`, `provider`, and `boardId` filters at `GET /api/sync-runs`; the limit is bounded to 1–100.
 - History is recorded only when a sync is explicitly run. This phase does not add a background scheduler or automatic polling.
 - After pulling this phase, run `npm run db:generate` and `npm run db:push` from the repository root to add the `SyncRun` table to the local SQLite database.
+
+
+## Individual source sync (Phase 1.23)
+
+- Each enabled configured board has a **Sync now** action in the source manager. It imports or updates postings from only that board, without running every configured board.
+- The targeted endpoint is `POST /api/sources/:id/sync`. It returns 404 for an unknown source and 409 when the source is disabled.
+- A targeted sync writes the same per-board sync-history record used by full sync, so its result and errors appear in source diagnostics.
+- Existing full sync remains available and unchanged. Targeted sync does not introduce automatic polling or background retries.
