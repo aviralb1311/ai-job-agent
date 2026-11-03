@@ -734,6 +734,7 @@ export function App() {
 
   useEffect(() => {
     void loadSources();
+    void loadCatalog();
     void loadSyncHistory();
     void loadProfile();
     void loadApplications();
