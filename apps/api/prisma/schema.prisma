@@ -15,6 +15,11 @@ model User {
   createdAt    DateTime     @default(now())
   profile      UserProfile?
   sessions     Session[]
+  candidateData UserCandidateProfile?
+  savedJobEntries UserSavedJob[]
+  savedSearchEntries UserSavedSearch[]
+  applicationDrafts UserApplicationDraft[]
+  applicationTracking UserApplicationTracking[]
 }
 
 model Session {
@@ -85,6 +90,9 @@ model Job {
   applicationDraft ApplicationDraft?
   applicationTracking ApplicationTracking?
   savedEntries SavedJob[]
+  userSavedEntries UserSavedJob[]
+  userApplicationDrafts UserApplicationDraft[]
+  userApplicationTracking UserApplicationTracking[]
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   @@unique([source, externalId])
@@ -170,4 +178,83 @@ model SyncRun {
   completedAt      DateTime
   @@index([provider, boardId, startedAt])
   @@index([startedAt])
+}
+
+
+/// Per-account candidate preferences and reviewed resume content.
+/// The legacy CandidateProfile is retained untouched for safe data migration.
+model UserCandidateProfile {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  skillsJson         String   @default("[]")
+  preferredRoles     String   @default("[]")
+  locations          String   @default("[]")
+  remotePreference   String   @default("ANY")
+  educationJson      String   @default("[]")
+  experienceJson     String   @default("[]")
+  projectsJson       String   @default("[]")
+  certificationsJson String   @default("[]")
+  updatedAt          DateTime @updatedAt
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model UserSavedJob {
+  id        String   @id @default(cuid())
+  userId    String
+  jobId     String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job       Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  @@unique([userId, jobId])
+  @@index([userId])
+  @@index([jobId])
+}
+
+model UserSavedSearch {
+  id            String   @id @default(cuid())
+  userId        String
+  name          String
+  filtersJson   String   @default("{}")
+  createdAt     DateTime @default(now())
+  lastCheckedAt DateTime @default(now())
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+}
+
+model UserApplicationDraft {
+  id              String   @id @default(cuid())
+  userId          String
+  jobId           String
+  resumeSummary   String   @default("")
+  highlightsJson  String   @default("[]")
+  coverLetter     String   @default("")
+  reviewNotesJson String   @default("[]")
+  status          String   @default("DRAFT")
+  reviewedAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job             Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  @@unique([userId, jobId])
+  @@index([userId])
+  @@index([jobId])
+}
+
+model UserApplicationTracking {
+  id         String   @id @default(cuid())
+  userId     String
+  jobId      String
+  status     String   @default("SAVED")
+  notes      String   @default("")
+  appliedAt  DateTime?
+  followUpAt DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job        Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  @@unique([userId, jobId])
+  @@index([userId])
+  @@index([jobId])
+  @@index([status])
+  @@index([followUpAt])
 }
