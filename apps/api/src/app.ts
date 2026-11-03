@@ -529,7 +529,8 @@ app.get("/api/jobs/:id/analyze", requireAuth, async (req, res) => {
 
 function serializeApplicationDraft(draft: {
   id: string; jobId: string; resumeSummary: string; highlightsJson: string; coverLetter: string;
-  reviewNotesJson: string; status: string; reviewedAt: Date | null; createdAt: Date; updatedAt: Date;
+  reviewNotesJson: string; status: string; workflowStatus: string; approvedAt: Date | null;
+  reviewedAt: Date | null; createdAt: Date; updatedAt: Date;
 }) {
   return {
     id: draft.id,
@@ -654,7 +655,7 @@ app.post("/api/jobs/:id/application-draft/review", requireAuth, async (req, res)
       where: { userId_jobId: { userId: res.locals.userId, jobId: String(req.params.id) } },
       data: { status: "REVIEWED", workflowStatus: "READY_FOR_REVIEW", approvedAt: null, reviewedAt: new Date() }
     });
-    res.json({ data: serializeApplicationDraft(saved), message: "Draft is ready for your final approval. Nothing has been submitted." });
+    res.json({ data: serializeApplicationDraft(saved), message: "Draft is ready for your final approval. No application was submitted." });
   } catch (error) {
     res.status(500).json({ error: "Unable to mark application draft reviewed", detail: error instanceof Error ? error.message : "Unknown error" });
   }
