@@ -422,11 +422,18 @@ app.get("/api/jobs", async (req, res) => {
     ]);
     const savedJobIds = new Set(savedRecords.map(record => record.jobId));
     const profile = parseProfile(profileRow);
+    const now = Date.now();
     const enriched = jobs.map(job => {
       const skills = readJsonList(job.skillsJson);
+      const verificationAgeMs = job.lastVerifiedAt ? now - job.lastVerifiedAt.getTime() : null;
+      // Expiry is a revalidation deadline, not proof that an employer closed the role.
+      const revalidationState = verificationAgeMs === null ? "UNVERIFIED"
+        : verificationAgeMs > 30 * 24 * 60 * 60 * 1000 ? "EXPIRED"
+        : verificationAgeMs > 7 * 24 * 60 * 60 * 1000 ? "STALE" : "FRESH";
       return {
         ...job,
         skills,
+        revalidationState,
         workMode: inferWorkMode(job.location, job.description),
         isSaved: savedJobIds.has(job.id),
         match: scoreJobMatch({ title: job.title, location: job.location, category: job.category, skills }, profile)
@@ -748,12 +755,21 @@ app.get("/api/sources", async (_req, res) => {
         : !lastVerifiedAt ? "NOT_VERIFIED"
         : now - lastVerifiedAt.getTime() > 7 * 24 * 60 * 60 * 1000 ? "STALE"
         : "RECENTLY_VERIFIED";
+      const staleListingCount = sourceJobs.filter(job =>
+        job.lastVerifiedAt !== null && now - job.lastVerifiedAt.getTime() > 7 * 24 * 60 * 60 * 1000 &&
+        now - job.lastVerifiedAt.getTime() <= 30 * 24 * 60 * 60 * 1000
+      ).length;
+      const expiredListingCount = sourceJobs.filter(job =>
+        job.lastVerifiedAt === null || now - job.lastVerifiedAt.getTime() > 30 * 24 * 60 * 60 * 1000
+      ).length;
       return {
         ...source,
         health: {
           listingCount: sourceJobs.length,
           verifiedListingCount: verifiedDates.length,
           missingDescriptionCount: sourceJobs.filter(job => !job.description.trim()).length,
+          staleListingCount,
+          expiredListingCount,
           lastVerifiedAt,
           freshness
         }
