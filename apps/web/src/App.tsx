@@ -18,7 +18,7 @@ type Job = {
   match?: { score: number | null; matchedSkills: string[]; missingSkills: string[]; reasons: string[] };
   workMode?: "REMOTE" | "HYBRID" | "ONSITE" | "UNKNOWN";
 };
-type SavedSearchFilters = { query: string; location: string; company: string; source: string; employmentType: string; workMode: string; skills: string[] };
+type SavedSearchFilters = { query: string; location: string; company: string; source: string; employmentType: string; workMode: string; sort: string; skills: string[] };
 type SavedSearch = { id: string; name: string; filters: SavedSearchFilters; createdAt: string; lastCheckedAt: string };
 type SearchAlertJob = { id: string; title: string; company: string; location: string | null; applicationUrl: string; discoveredAt: string };
 type SyncSummary = {
@@ -169,7 +169,7 @@ export function App() {
     try {
       const filters: SavedSearchFilters = {
         query: query.trim(), location: location.trim(), company: companyFilter.trim(),
-        source, employmentType, workMode, skills: requiredSkills.split(",").map(item => item.trim()).filter(Boolean)
+        source, employmentType, workMode, sort, skills: requiredSkills.split(",").map(item => item.trim()).filter(Boolean)
       };
       const response = await fetch(API + "/api/saved-searches", {
         method: "POST",
@@ -194,11 +194,12 @@ export function App() {
     setSource(search.filters.source);
     setEmploymentType(search.filters.employmentType);
     setWorkMode(search.filters.workMode);
+    setSort(search.filters.sort);
     setRequiredSkills(search.filters.skills.join(", "));
     void loadJobs({
       query: search.filters.query, location: search.filters.location, companyFilter: search.filters.company,
       source: search.filters.source, employmentType: search.filters.employmentType,
-      workMode: search.filters.workMode, requiredSkills: search.filters.skills.join(", "), sort
+      workMode: search.filters.workMode, requiredSkills: search.filters.skills.join(", "), sort: search.filters.sort
     });
   }
 
