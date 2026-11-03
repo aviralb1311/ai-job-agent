@@ -41,6 +41,7 @@ export interface JobSyncSummary {
 }
 
 let activeSync: Promise<JobSyncSummary> | null = null;
+let activeSyncKind: "FULL" | "SOURCE" | null = null;
 
 async function runSync(target?: { provider: string; boardId: string }): Promise<JobSyncSummary> {
   const summary: JobSyncSummary = {
@@ -168,14 +169,22 @@ async function runSync(target?: { provider: string; boardId: string }): Promise<
 /** Syncs one enabled, configured board and records its normal per-board history. */
 export async function syncSource(provider: string, boardId: string): Promise<JobSyncSummary> {
   if (activeSync) await activeSync;
-  return runSync({ provider, boardId });
+  activeSyncKind = "SOURCE";
+  activeSync = runSync({ provider, boardId }).finally(() => {
+    activeSync = null;
+    activeSyncKind = null;
+  });
+  return activeSync;
 }
 
-/** Coalesces overlapping full sync requests in this API process. */
+/** Serializes source/full syncs and coalesces overlapping full-sync requests. */
 export function syncJobs(): Promise<JobSyncSummary> {
-  if (activeSync) return activeSync;
+  if (activeSync && activeSyncKind === "FULL") return activeSync;
+  if (activeSync) return activeSync.then(() => syncJobs());
+  activeSyncKind = "FULL";
   activeSync = runSync().finally(() => {
     activeSync = null;
+    activeSyncKind = null;
   });
   return activeSync;
 }
