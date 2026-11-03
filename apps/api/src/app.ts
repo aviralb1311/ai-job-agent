@@ -14,7 +14,16 @@ import { inferWorkMode, matchesRequiredSkills, matchesWorkMode, textRelevance } 
 import { FOLLOW_UP_BUCKETS, isDateKey, matchesFollowUpBucket, type FollowUpBucket } from "./jobs/follow-ups.js";
 
 export const app = express();
-app.use(cors({ origin: config.CORS_ORIGIN, credentials: true }));
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || origin === config.CORS_ORIGIN || /^chrome-extension:\/\/[a-p]{32}$/.test(origin)) {
+      callback(null, origin || config.CORS_ORIGIN);
+      return;
+    }
+    callback(new Error("Origin not allowed by CORS"));
+  },
+  credentials: true
+}));
 app.use(express.json({ limit: "1mb" }));
 
 const SUPPORTED_PROVIDERS = ["GREENHOUSE", "LEVER", "ASHBY"] as const;
