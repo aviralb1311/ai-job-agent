@@ -20,6 +20,8 @@ model User {
   savedSearchEntries UserSavedSearch[]
   applicationDrafts UserApplicationDraft[]
   applicationTracking UserApplicationTracking[]
+  extensionPairingCodes ExtensionPairingCode[]
+  extensionAccessTokens ExtensionAccessToken[]
 }
 
 model Session {
@@ -267,4 +269,29 @@ model UserApplicationTracking {
   @@index([jobId])
   @@index([status])
   @@index([followUpAt])
+}
+
+/// One-time code used to pair the browser extension with a signed-in account.
+model ExtensionPairingCode {
+  id        String   @id @default(cuid())
+  codeHash  String   @unique
+  userId    String
+  expiresAt DateTime
+  consumedAt DateTime?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+/// Short-lived, revocable bearer credential issued to a paired extension.
+model ExtensionAccessToken {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+  @@index([expiresAt])
 }
