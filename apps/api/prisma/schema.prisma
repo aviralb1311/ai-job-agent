@@ -126,3 +126,14 @@ model ApplicationTracking {
   @@index([status])
   @@index([followUpAt])
 }
+
+
+model SavedSearch {
+  id            String   @id @default(cuid())
+  userId        String   @default("local")
+  name          String
+  filtersJson   String   @default("{}")
+  createdAt     DateTime @default(now())
+  lastCheckedAt DateTime @default(now())
+  @@index([userId])
+}

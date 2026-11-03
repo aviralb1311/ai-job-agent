@@ -139,3 +139,16 @@ The API exposes a starter catalog of candidate Greenhouse, Lever, and Ashby boar
 - Sort results by newest publication/discovery date, profile match score, or overall relevance (profile match first, then title/company/description text relevance).
 - Filters are combined server-side and the API reports the total number of matching jobs before the 100-result response cap.
 - The match score remains a transparent heuristic, not a hiring prediction. Work-mode classification is a keyword heuristic and should be checked against the original employer listing.
+
+
+## Saved searches and in-app alerts (Phase 1.19)
+
+- Save the current keyword, location, company, source, employment type, work-mode, and required-skill filters under a custom name.
+- Reapply a saved search to restore its filters in the dashboard.
+
+- Saved searches also retain the selected sort order (newest, profile match, or relevance) when reapplied.
+- **Check new jobs** compares matching postings discovered since the previous check and displays up to 50 new results with links to the original employer listings.
+- Each check advances that search's last-checked timestamp, so the same posting is not repeatedly reported as new.
+- Alerts are checked manually inside the app. No email, push notification, background polling, application submission, or employer contact is performed.
+- Saved searches use the same single local profile key (`local`) as the shortlist; authentication and multi-user separation are not included in this MVP.
+- After pulling this phase, run `npm run db:generate` and `npm run db:push` from the repository root to add the `SavedSearch` table to the local SQLite database.

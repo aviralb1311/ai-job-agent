@@ -18,6 +18,9 @@ type Job = {
   match?: { score: number | null; matchedSkills: string[]; missingSkills: string[]; reasons: string[] };
   workMode?: "REMOTE" | "HYBRID" | "ONSITE" | "UNKNOWN";
 };
+type SavedSearchFilters = { query: string; location: string; company: string; source: string; employmentType: string; workMode: string; sort: string; skills: string[] };
+type SavedSearch = { id: string; name: string; filters: SavedSearchFilters; createdAt: string; lastCheckedAt: string };
+type SearchAlertJob = { id: string; title: string; company: string; location: string | null; applicationUrl: string; discoveredAt: string };
 type SyncSummary = {
   fetched: number;
   inserted: number;
@@ -109,6 +112,12 @@ export function App() {
   const [showSavedOnly, setShowSavedOnly] = useState(false);
   const [savedJobsBusy, setSavedJobsBusy] = useState(false);
   const [savingJobId, setSavingJobId] = useState<string | null>(null);
+  const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([]);
+  const [savedSearchName, setSavedSearchName] = useState("");
+  const [savedSearchBusy, setSavedSearchBusy] = useState(false);
+  const [checkingSearchId, setCheckingSearchId] = useState<string | null>(null);
+  const [searchAlerts, setSearchAlerts] = useState<Record<string, SearchAlertJob[]>>({});
+  const [searchAlertMessages, setSearchAlertMessages] = useState<Record<string, string>>({});
 
   const loadJobs = useCallback(async (filters = { query, location, source, employmentType, workMode, companyFilter, requiredSkills, sort }) => {
     setLoading(true);
@@ -138,6 +147,90 @@ export function App() {
   }, [query, location, source, employmentType, workMode, companyFilter, requiredSkills, sort]);
 
 
+
+
+  const loadSavedSearches = useCallback(async () => {
+    try {
+      const response = await fetch(API + "/api/saved-searches");
+      const body = await response.json() as { data?: SavedSearch[]; error?: string };
+      if (!response.ok || !body.data) throw new Error(body.error || "Could not load saved searches");
+      setSavedSearches(body.data);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not load saved searches");
+    }
+  }, []);
+
+  async function saveCurrentSearch(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const name = savedSearchName.trim();
+    if (!name) return;
+    setSavedSearchBusy(true);
+    setError("");
+    try {
+      const filters: SavedSearchFilters = {
+        query: query.trim(), location: location.trim(), company: companyFilter.trim(),
+        source, employmentType, workMode, sort, skills: requiredSkills.split(",").map(item => item.trim()).filter(Boolean)
+      };
+      const response = await fetch(API + "/api/saved-searches", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, filters })
+      });
+      const body = await response.json() as { data?: SavedSearch; error?: string; detail?: string };
+      if (!response.ok || !body.data) throw new Error(body.detail || body.error || "Could not save search");
+      setSavedSearches(current => [body.data!, ...current]);
+      setSavedSearchName("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save search");
+    } finally {
+      setSavedSearchBusy(false);
+    }
+  }
+
+  function applySavedSearch(search: SavedSearch) {
+    setQuery(search.filters.query);
+    setLocation(search.filters.location);
+    setCompanyFilter(search.filters.company);
+    setSource(search.filters.source);
+    setEmploymentType(search.filters.employmentType);
+    setWorkMode(search.filters.workMode);
+    setSort(search.filters.sort);
+    setRequiredSkills(search.filters.skills.join(", "));
+    void loadJobs({
+      query: search.filters.query, location: search.filters.location, companyFilter: search.filters.company,
+      source: search.filters.source, employmentType: search.filters.employmentType,
+      workMode: search.filters.workMode, requiredSkills: search.filters.skills.join(", "), sort: search.filters.sort
+    });
+  }
+
+  async function checkSavedSearchAlerts(search: SavedSearch) {
+    setCheckingSearchId(search.id);
+    setSearchAlertMessages(current => ({ ...current, [search.id]: "" }));
+    try {
+      const response = await fetch(API + "/api/saved-searches/" + encodeURIComponent(search.id) + "/alerts");
+      const body = await response.json() as { data?: SearchAlertJob[]; count?: number; error?: string; detail?: string };
+      if (!response.ok || !body.data) throw new Error(body.detail || body.error || "Could not check alerts");
+      setSearchAlerts(current => ({ ...current, [search.id]: body.data! }));
+      setSearchAlertMessages(current => ({ ...current, [search.id]: body.count ? `${body.count} new matching job(s) found.` : "No new matching jobs since the last check." }));
+      await loadSavedSearches();
+    } catch (e) {
+      setSearchAlertMessages(current => ({ ...current, [search.id]: e instanceof Error ? e.message : "Could not check alerts" }));
+    } finally {
+      setCheckingSearchId(null);
+    }
+  }
+
+  async function deleteSavedSearch(search: SavedSearch) {
+    try {
+      const response = await fetch(API + "/api/saved-searches/" + encodeURIComponent(search.id), { method: "DELETE" });
+      const body = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(body.error || "Could not delete saved search");
+      setSavedSearches(current => current.filter(item => item.id !== search.id));
+      setSearchAlerts(current => { const next = { ...current }; delete next[search.id]; return next; });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not delete saved search");
+    }
+  }
 
   const loadSavedJobs = useCallback(async () => {
     setSavedJobsBusy(true);
@@ -578,6 +671,7 @@ export function App() {
     void loadSources();
     void loadProfile();
     void loadApplications();
+    void loadSavedSearches();
     void (async () => {
       try {
         const response = await fetch(`${API}/api/profile/resume`);
@@ -587,7 +681,7 @@ export function App() {
         // Resume details are optional; profile preferences remain usable.
       }
     })();
-  }, [loadSources, loadProfile, loadApplications]);
+  }, [loadSources, loadProfile, loadApplications, loadSavedSearches]);
 
   const sourceCount = new Set(jobs.map(job => job.source)).size;
 
@@ -779,6 +873,38 @@ export function App() {
         setEmploymentType(""); setWorkMode("ANY"); setCompanyFilter(""); setRequiredSkills(""); setSort("NEWEST"); setSource(""); void loadJobs({ query, location, source: "", employmentType: "", workMode: "ANY", companyFilter: "", requiredSkills: "", sort: "NEWEST" });
       }}>Clear filters</button>
     </section>}
+
+
+    <section className="saved-search-section">
+      <div className="section-heading">
+        <div><span className="eyebrow-dark">SAVED SEARCHES</span><h3>Keep an eye on matching roles</h3><p>Save the current filters and manually check for newly discovered matching jobs. Alerts stay in this dashboard.</p></div>
+      </div>
+      <form className="saved-search-form" onSubmit={saveCurrentSearch}>
+        <label>Search name
+          <input value={savedSearchName} onChange={event => setSavedSearchName(event.target.value)} maxLength={80} required placeholder="e.g. Remote backend internships" />
+        </label>
+        <button type="submit" disabled={savedSearchBusy || !savedSearchName.trim()}>{savedSearchBusy ? "Saving…" : "Save current search"}</button>
+      </form>
+      {!!savedSearches.length && <div className="saved-search-list">
+        {savedSearches.map(search => <article className="saved-search-card" key={search.id}>
+          <div className="saved-search-info">
+            <strong>{search.name}</strong>
+            <small>{[search.filters.query, search.filters.company, search.filters.location, search.filters.employmentType, search.filters.workMode !== "ANY" ? search.filters.workMode : "", ...search.filters.skills].filter(Boolean).join(" · ") || "All jobs"}</small>
+            <small>Last checked: {new Date(search.lastCheckedAt).toLocaleString()}</small>
+          </div>
+          <div className="saved-search-actions">
+            <button className="small-action secondary" type="button" onClick={() => applySavedSearch(search)}>Apply filters</button>
+            <button className="small-action secondary" type="button" disabled={checkingSearchId === search.id} onClick={() => void checkSavedSearchAlerts(search)}>{checkingSearchId === search.id ? "Checking…" : "Check new jobs"}</button>
+            <button className="small-action danger-action" type="button" onClick={() => void deleteSavedSearch(search)}>Delete</button>
+          </div>
+          {searchAlertMessages[search.id] && <p className="saved-search-message" role="status">{searchAlertMessages[search.id]}</p>}
+          {!!searchAlerts[search.id]?.length && <ul className="saved-search-alerts">
+            {searchAlerts[search.id].map(job => <li key={job.id}><a href={job.applicationUrl} target="_blank" rel="noreferrer">{job.title} · {job.company}</a><small>{job.location || "Location not specified"} · discovered {new Date(job.discoveredAt).toLocaleString()}</small></li>)}
+          </ul>}
+        </article>)}
+      </div>}
+      {!savedSearches.length && <p className="form-hint">No saved searches yet. Apply your filters above, name the search, and save it here.</p>}
+    </section>
 
     {syncSummary && <section className="sync-result" aria-live="polite">
       <div><strong>Sync completed</strong><span> {syncSummary.fetched} fetched</span></div>
