@@ -938,10 +938,10 @@ export function App() {
     <section className="toolbar">
       <div><h3>Job opportunities</h3><p>Browse, filter and rank normalized public job listings.</p></div>
       <div className="toolbar-actions">
-        <button className="secondary" type="button" disabled={savedJobsBusy || loading} onClick={() => void loadSavedJobs()}>{savedJobsBusy ? "Loading saved…" : "★ Saved jobs"}</button>
+        {user && <button className="secondary" type="button" disabled={savedJobsBusy || loading} onClick={() => void loadSavedJobs()}>{savedJobsBusy ? "Loading saved…" : "★ Saved jobs"}</button>}
         {showSavedOnly && <button className="secondary" type="button" onClick={() => void loadJobs()}>All jobs</button>}
         <button className="secondary" disabled={loading || syncing} onClick={() => void loadJobs()}>Refresh</button>
-        <button disabled={syncing} onClick={() => void sync()}>{syncing ? "Syncing sources…" : "↻ Sync job sources"}</button>
+        {user?.role === "ADMIN" && <button disabled={syncing} onClick={() => void sync()}>{syncing ? "Syncing sources…" : "↻ Sync job sources"}</button>}
       </div>
     </section>
     {!showSavedOnly && <section className="advanced-filters" aria-label="Advanced job filters">
