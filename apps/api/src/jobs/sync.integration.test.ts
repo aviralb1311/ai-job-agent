@@ -40,6 +40,7 @@ const leverJob = {
 
 describe("job sync SQLite integration", () => {
   beforeEach(async () => {
+    await prisma.syncRun.deleteMany();
     await prisma.savedSearch.deleteMany();
     await prisma.savedJob.deleteMany();
     await prisma.job.deleteMany();
@@ -52,6 +53,7 @@ describe("job sync SQLite integration", () => {
   });
 
   afterAll(async () => {
+    await prisma.syncRun.deleteMany();
     await prisma.savedSearch.deleteMany();
     await prisma.savedJob.deleteMany();
     await prisma.job.deleteMany();
