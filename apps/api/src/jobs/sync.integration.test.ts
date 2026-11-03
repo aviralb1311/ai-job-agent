@@ -332,7 +332,7 @@ describe("job sync SQLite integration", () => {
       await new Promise<void>(resolve => server.once("listening", resolve));
       const address = server.address();
       if (!address || typeof address === "string") throw new Error("Test server did not bind to a TCP port");
-      const response = await fetch(`http://127.0.0.1:${address.port}/api/jobs/${job.id}/analyze`);
+      const response = await authenticatedFetch(`http://127.0.0.1:${address.port}/api/jobs/${job.id}/analyze`);
       const body = await response.json() as { data?: { score: number; matchedSkills: string[]; evidence: Array<{ skill: string; sections: string[] }> } };
       expect(response.status).toBe(200);
       expect(body.data?.score).toBe(100);
@@ -378,16 +378,16 @@ describe("job sync SQLite integration", () => {
       const address = server.address();
       if (!address || typeof address === "string") throw new Error("Test server did not bind to a TCP port");
       const base = `http://127.0.0.1:${address.port}/api/jobs/${job.id}/application-draft`;
-      const createdResponse = await fetch(base, { method: "POST" });
+      const createdResponse = await authenticatedFetch(base, { method: "POST" });
       const created = await createdResponse.json() as { data?: { id: string; status: string; coverLetter: string }; error?: string };
       expect(createdResponse.status).toBe(201);
       expect(created.data?.status).toBe("DRAFT");
       expect(created.data?.coverLetter).toContain("Node.js");
 
-      const duplicateResponse = await fetch(base, { method: "POST" });
+      const duplicateResponse = await authenticatedFetch(base, { method: "POST" });
       expect(duplicateResponse.status).toBe(409);
 
-      const updateResponse = await fetch(base, {
+      const updateResponse = await authenticatedFetch(base, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
