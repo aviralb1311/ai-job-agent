@@ -9,6 +9,7 @@ import { parseResumeBuffer, ResumeParseError } from "./jobs/resume-parser.js";
 import { analyzeJobFit } from "./jobs/fit-analysis.js";
 import { generateApplicationDraft } from "./jobs/application-draft.js";
 import { inferWorkMode, matchesRequiredSkills, matchesWorkMode, textRelevance } from "./jobs/search.js";
+import { FOLLOW_UP_BUCKETS, isDateKey, matchesFollowUpBucket, type FollowUpBucket } from "./jobs/follow-ups.js";
 
 export const app = express();
 app.use(cors({ origin: config.CORS_ORIGIN }));
@@ -668,6 +669,41 @@ function serializeApplicationTracking(record: {
     updatedAt: record.updatedAt
   };
 }
+
+app.get("/api/applications/follow-ups", async (req, res) => {
+  const bucketValue = typeof req.query.bucket === "string" ? req.query.bucket.toUpperCase() : "ALL";
+  const bucket = FOLLOW_UP_BUCKETS.includes(bucketValue as FollowUpBucket) ? bucketValue as FollowUpBucket : null;
+  const today = typeof req.query.today === "string" ? req.query.today : new Date().toISOString().slice(0, 10);
+  if (!bucket || !isDateKey(today)) {
+    res.status(400).json({ error: "bucket must be OVERDUE, TODAY, UPCOMING or ALL, and today must be a valid YYYY-MM-DD date." });
+    return;
+  }
+  try {
+    const records = await prisma.applicationTracking.findMany({
+      where: {
+        followUpAt: { not: null },
+        status: { notIn: ["REJECTED", "WITHDRAWN"] }
+      },
+      orderBy: [{ followUpAt: "asc" }, { updatedAt: "desc" }],
+      include: { job: { select: { id: true, title: true, company: true, location: true, applicationUrl: true } } }
+    });
+    const scheduled = records.filter(record => record.followUpAt !== null);
+    const counts = {
+      OVERDUE: scheduled.filter(record => matchesFollowUpBucket(record.followUpAt!, "OVERDUE", today)).length,
+      TODAY: scheduled.filter(record => matchesFollowUpBucket(record.followUpAt!, "TODAY", today)).length,
+      UPCOMING: scheduled.filter(record => matchesFollowUpBucket(record.followUpAt!, "UPCOMING", today)).length,
+      ALL: scheduled.length
+    };
+    const data = scheduled.filter(record => matchesFollowUpBucket(record.followUpAt!, bucket, today)).map(record => ({
+      ...serializeApplicationTracking(record),
+      followUpAt: record.followUpAt!.toISOString().slice(0, 10),
+      job: record.job
+    }));
+    res.json({ data, count: data.length, counts, today });
+  } catch (error) {
+    res.status(500).json({ error: "Unable to retrieve follow-up reminders", detail: error instanceof Error ? error.message : "Unknown error" });
+  }
+});
 
 app.get("/api/applications", async (req, res) => {
   const status = typeof req.query.status === "string" ? req.query.status.toUpperCase() : "";
