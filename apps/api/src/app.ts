@@ -2,7 +2,7 @@ import express from "express";
 import cors from "cors";
 import { config } from "./config.js";
 import { prisma } from "./db.js";
-import { previewSource, syncJobs } from "./jobs/service.js";
+import { previewSource, syncJobs, syncSource } from "./jobs/service.js";
 import { sourceCatalog } from "./jobs/source-catalog.js";
 import { scoreJobMatch, type CandidatePreferences } from "./jobs/intelligence.js";
 import { parseResumeBuffer, ResumeParseError } from "./jobs/resume-parser.js";
@@ -866,6 +866,27 @@ app.get("/api/sync-runs", async (req, res) => {
     })) });
   } catch (error) {
     res.status(500).json({ error: "Unable to retrieve sync history", detail: error instanceof Error ? error.message : "Unknown database error" });
+  }
+});
+
+app.post("/api/sources/:id/sync", async (req, res) => {
+  try {
+    const source = await prisma.jobSource.findUnique({ where: { id: req.params.id } });
+    if (!source) {
+      res.status(404).json({ error: "Job source not found" });
+      return;
+    }
+    if (!source.enabled) {
+      res.status(409).json({ error: "Enable this source before syncing it." });
+      return;
+    }
+    const result = await syncSource(source.provider, source.boardId);
+    res.json({ data: result, source: { id: source.id, provider: source.provider, boardId: source.boardId } });
+  } catch (error) {
+    res.status(500).json({
+      error: "Unable to sync this job source",
+      detail: error instanceof Error ? error.message : "Unknown synchronization error"
+    });
   }
 });
 
