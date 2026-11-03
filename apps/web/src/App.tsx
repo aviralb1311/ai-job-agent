@@ -701,6 +701,21 @@ export function App() {
       {syncSummary.errors.length > 0 && <details><summary>View source errors</summary><ul>{syncSummary.errors.map((item, index) => <li key={index}>{item}</li>)}</ul></details>}
     </section>}
 
+
+    <section className="tracker-overview">
+      <div className="section-heading"><div><span className="eyebrow-dark">APPLICATION PIPELINE</span><h3>Track your applications</h3><p>Keep a record of progress, application dates, notes and follow-ups. Updates are manual; nothing is sent to employers.</p></div><button className="secondary" type="button" onClick={() => void loadApplications()}>Refresh tracker</button></div>
+      <div className="tracker-stats">
+        <article><span>Tracked</span><strong>{applicationRecords.length}</strong></article>
+        <article><span>Applied</span><strong>{applicationRecords.filter(item => item.status === "APPLIED").length}</strong></article>
+        <article><span>Interviews</span><strong>{applicationRecords.filter(item => item.status === "INTERVIEW").length}</strong></article>
+        <article><span>Offers</span><strong>{applicationRecords.filter(item => item.status === "OFFER").length}</strong></article>
+      </div>
+      {!!applicationRecords.length && <div className="tracker-recent">
+        <strong>Recent tracked roles</strong>
+        {applicationRecords.slice(0, 5).map(item => <div key={item.jobId}><span>{item.job.title} · {item.job.company}</span><span className="tracker-status">{item.status.replaceAll("_", " ")}</span>{item.followUpAt && <small>Follow up: {new Date(item.followUpAt + "T00:00:00").toLocaleDateString()}</small>}</div>)}
+      </div>}
+    </section>
+
     {error && <div className="error" role="alert">{error}</div>}
 
     <section className="jobs" aria-live="polite">
@@ -722,6 +737,28 @@ export function App() {
           <a href={job.applicationUrl} target="_blank" rel="noreferrer">View original listing ↗</a>
         </div>
 
+
+        <details className="application-tracking">
+          <summary>Track application progress</summary>
+          <div className="tracking-fields">
+            <label>Status
+              <select value={trackingByJob[job.id]?.status ?? "SAVED"} onChange={event => updateTracking(job.id, "status", event.target.value)}>
+                <option value="SAVED">Saved</option><option value="PREPARING">Preparing</option><option value="APPLIED">Applied</option><option value="INTERVIEW">Interview</option><option value="OFFER">Offer</option><option value="REJECTED">Rejected</option><option value="WITHDRAWN">Withdrawn</option>
+              </select>
+            </label>
+            <label>Applied on
+              <input type="date" value={trackingByJob[job.id]?.appliedAt ?? ""} onChange={event => updateTracking(job.id, "appliedAt", event.target.value)} />
+            </label>
+            <label>Follow-up date
+              <input type="date" value={trackingByJob[job.id]?.followUpAt ?? ""} onChange={event => updateTracking(job.id, "followUpAt", event.target.value)} />
+            </label>
+            <label className="tracking-notes">Notes
+              <textarea rows={3} maxLength={5000} value={trackingByJob[job.id]?.notes ?? ""} onChange={event => updateTracking(job.id, "notes", event.target.value)} placeholder="Recruiter contact, interview preparation, next steps…" />
+            </label>
+            <div className="tracking-save"><button type="button" disabled={trackingSaving === job.id} onClick={() => void saveTracking(job.id)}>{trackingSaving === job.id ? "Saving…" : "Save progress"}</button></div>
+          </div>
+          {trackingMessage && <p className="resume-message" role="status">{trackingMessage}</p>}
+        </details>
         <button className="small-action secondary" type="button" disabled={draftBusy === job.id} onClick={() => void openApplicationDraft(job.id)}>
           {draftBusy === job.id ? "Preparing…" : applicationDraft?.jobId === job.id ? "Hide application draft" : "Prepare application"}
         </button>
