@@ -12,6 +12,7 @@ type Job = {
   publishedAt: string | null;
   discoveredAt?: string;
   lastVerifiedAt?: string;
+  revalidationState?: "FRESH" | "STALE" | "EXPIRED" | "UNVERIFIED";
   employmentType?: string;
   status: string;
   isSaved?: boolean;
@@ -46,7 +47,7 @@ type JobSource = {
   displayName: string | null;
   enabled: boolean;
   createdAt: string;
-  health?: { listingCount: number; verifiedListingCount: number; missingDescriptionCount: number; lastVerifiedAt: string | null; freshness: "NO_LISTINGS" | "NOT_VERIFIED" | "STALE" | "RECENTLY_VERIFIED" };
+  health?: { listingCount: number; verifiedListingCount: number; missingDescriptionCount: number; staleListingCount: number; expiredListingCount: number; lastVerifiedAt: string | null; freshness: "NO_LISTINGS" | "NOT_VERIFIED" | "STALE" | "RECENTLY_VERIFIED" };
 };
 type SourceCatalogEntry = { id: string; provider: Provider; boardId: string; displayName: string; description: string; careersUrl: string; focus: string };
 type SourcePreview = {
@@ -868,13 +869,13 @@ export function App() {
           <span className={item.enabled ? "enabled-label" : "disabled-label"}>{item.enabled ? "Enabled" : "Disabled"}</span>
           <div className="source-health" aria-label="Stored listing freshness">
             <strong>{item.health?.listingCount ?? 0} listings</strong>
-            <span>{item.health?.verifiedListingCount ?? 0} verified · {item.health?.missingDescriptionCount ?? 0} missing descriptions</span>
+            <span>{item.health?.verifiedListingCount ?? 0} verified · {item.health?.staleListingCount ?? 0} stale · {item.health?.expiredListingCount ?? 0} overdue · {item.health?.missingDescriptionCount ?? 0} missing descriptions</span>
             <small className={`freshness-${(item.health?.freshness ?? "NO_LISTINGS").toLowerCase()}`}>
               {(item.health?.freshness ?? "NO_LISTINGS").replaceAll("_", " ").toLowerCase()}
               {item.health?.lastVerifiedAt ? ` · ${new Date(item.health.lastVerifiedAt).toLocaleDateString()}` : ""}
             </small>
           </div>
-          <button className="small-action secondary" disabled={!item.enabled || syncingSourceId !== null} onClick={() => void syncOneSource(item)}>{syncingSourceId === item.id ? "Syncing…" : "Sync now"}</button>
+          <button className="small-action secondary" disabled={!item.enabled || syncingSourceId !== null} onClick={() => void syncOneSource(item)}>{syncingSourceId === item.id ? "Revalidating…" : item.health && item.health.expiredListingCount + item.health.staleListingCount > 0 ? "Revalidate board" : "Sync now"}</button>
           <button className="small-action secondary" onClick={() => void toggleSource(item)}>{item.enabled ? "Disable" : "Enable"}</button>
           <button className="small-action danger-action" onClick={() => void removeSource(item)}>Remove</button>
         </article>)}
@@ -1024,7 +1025,7 @@ export function App() {
 
     <section className="jobs" aria-live="polite">
       {jobs.map(job => <article className="job" key={job.id}>
-        <div className="job-top"><span className={`source source-${job.source.toLowerCase()}`}>{job.source}</span><span className="status">{job.status}</span></div>
+        <div className="job-top"><span className={`source source-${job.source.toLowerCase()}`}>{job.source}</span><span className="status">{job.status}</span><span className={`revalidation-badge revalidation-${(job.revalidationState ?? "UNVERIFIED").toLowerCase()}`}>{job.revalidationState === "FRESH" ? "Recently verified" : job.revalidationState === "STALE" ? "Recheck recommended" : job.revalidationState === "EXPIRED" ? "Revalidation overdue" : "Not yet verified"}</span></div>
         <h3>{job.title}</h3>
         <p className="company">{job.company}</p>
         <p className="muted">{job.location || "Location not specified"} · {job.workMode ? job.workMode.replaceAll("_", " ") : "Work mode unknown"} · {job.publishedAt ? new Date(job.publishedAt).toLocaleDateString() : "Publication date unavailable"}</p>
