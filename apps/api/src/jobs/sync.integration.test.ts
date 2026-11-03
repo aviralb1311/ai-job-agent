@@ -1,4 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { createHash, randomBytes } from "node:crypto";
+
 
 const { greenhouseFetch, leverFetch, ashbyFetch } = vi.hoisted(() => ({
   greenhouseFetch: vi.fn(),
@@ -29,6 +31,29 @@ const greenhouseJob = {
   url: "https://jobs.example.test/backend?utm_source=greenhouse"
 };
 
+let testUserId = "";
+let testCookie = "";
+
+async function createTestAccount(): Promise<void> {
+  const token = randomBytes(32).toString("base64url");
+  const user = await prisma.user.create({ data: { email: `test-${randomBytes(6).toString("hex")}@example.test` } });
+  await prisma.session.create({
+    data: {
+      userId: user.id,
+      tokenHash: createHash("sha256").update(token).digest("hex"),
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000)
+    }
+  });
+  testUserId = user.id;
+  testCookie = `ai_job_session=${token}`;
+}
+
+async function authenticatedFetch(input: string | URL, init: RequestInit = {}): Promise<Response> {
+  const headers = new Headers(init.headers);
+  headers.set("Cookie", testCookie);
+  return fetch(input, { ...init, headers });
+}
+
 const leverJob = {
   id: "lever-202",
   title: "Backend Engineer",
@@ -40,12 +65,24 @@ const leverJob = {
 
 describe("job sync SQLite integration", () => {
   beforeEach(async () => {
+    await prisma.session.deleteMany();
+    await prisma.user.deleteMany();
+    await prisma.session.deleteMany();
+    await prisma.user.deleteMany();
     await prisma.syncRun.deleteMany();
+    await prisma.userSavedSearch.deleteMany();
     await prisma.savedSearch.deleteMany();
+    await prisma.userSavedJob.deleteMany();
     await prisma.savedJob.deleteMany();
     await prisma.job.deleteMany();
     await prisma.jobSource.deleteMany();
     await prisma.candidateProfile.deleteMany();
+    await prisma.userCandidateProfile.deleteMany();
+    await prisma.userSavedJob.deleteMany();
+    await prisma.userSavedSearch.deleteMany();
+    await prisma.userApplicationDraft.deleteMany();
+    await prisma.userApplicationTracking.deleteMany();
+    await createTestAccount();
 
     greenhouseFetch.mockReset().mockResolvedValue([greenhouseJob]);
     leverFetch.mockReset().mockResolvedValue([]);
@@ -54,7 +91,9 @@ describe("job sync SQLite integration", () => {
 
   afterAll(async () => {
     await prisma.syncRun.deleteMany();
+    await prisma.userSavedSearch.deleteMany();
     await prisma.savedSearch.deleteMany();
+    await prisma.userSavedJob.deleteMany();
     await prisma.savedJob.deleteMany();
     await prisma.job.deleteMany();
     await prisma.jobSource.deleteMany();
@@ -260,9 +299,9 @@ describe("job sync SQLite integration", () => {
   });
 
   it("serves explainable resume-to-job analysis from the stored candidate profile", async () => {
-    await prisma.candidateProfile.create({
+    await prisma.userCandidateProfile.create({
       data: {
-        id: "default",
+        userId: testUserId,
         skillsJson: JSON.stringify(["Node.js", "PostgreSQL"]),
         preferredRoles: JSON.stringify(["BACKEND"]),
         locations: "[]",
@@ -306,9 +345,9 @@ describe("job sync SQLite integration", () => {
 
 
   it("creates, edits and marks an application draft reviewed without submitting it", async () => {
-    await prisma.candidateProfile.create({
+    await prisma.userCandidateProfile.create({
       data: {
-        id: "default",
+        userId: testUserId,
         skillsJson: JSON.stringify(["Node.js", "PostgreSQL"]),
         preferredRoles: JSON.stringify(["BACKEND"]),
         locations: "[]",
@@ -361,7 +400,7 @@ describe("job sync SQLite integration", () => {
       expect(updateResponse.status).toBe(200);
       expect(updated.data).toMatchObject({ status: "DRAFT", coverLetter: "Edited cover letter for manual review." });
 
-      const reviewResponse = await fetch(base + "/review", { method: "POST" });
+      const reviewResponse = await authenticatedFetch(base + "/review", { method: "POST" });
       const reviewed = await reviewResponse.json() as { data?: { status: string; reviewedAt: string | null }; message?: string };
       expect(reviewResponse.status).toBe(200);
       expect(reviewed.data?.status).toBe("REVIEWED");
@@ -393,7 +432,7 @@ describe("job sync SQLite integration", () => {
       if (!address || typeof address === "string") throw new Error("Test server did not bind to a TCP port");
       const base = "http://127.0.0.1:" + address.port;
       const endpoint = base + "/api/jobs/" + job.id + "/application-tracking";
-      const saveResponse = await fetch(endpoint, {
+      const saveResponse = await authenticatedFetch(endpoint, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -412,13 +451,13 @@ describe("job sync SQLite integration", () => {
         followUpAt: "2026-11-08"
       });
 
-      const listResponse = await fetch(base + "/api/applications?status=INTERVIEW");
+      const listResponse = await authenticatedFetch(base + "/api/applications?status=INTERVIEW");
       const list = await listResponse.json() as { data?: Array<{ jobId: string; job: { title: string } }>; count: number };
       expect(listResponse.status).toBe(200);
       expect(list.count).toBe(1);
       expect(list.data?.[0]).toMatchObject({ jobId: job.id, job: { title: "Software Engineer" } });
 
-      const invalidResponse = await fetch(endpoint, {
+      const invalidResponse = await authenticatedFetch(endpoint, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: "SUBMITTED", notes: "", appliedAt: "not-a-date", followUpAt: "" })
@@ -453,28 +492,28 @@ describe("job sync SQLite integration", () => {
       const base = "http://127.0.0.1:" + address.port;
       const jobEndpoint = base + "/api/jobs/" + job.id + "/save";
 
-      const initialJobsResponse = await fetch(base + "/api/jobs");
+      const initialJobsResponse = await authenticatedFetch(base + "/api/jobs");
       const initialJobs = await initialJobsResponse.json() as { data: Array<{ id: string; isSaved: boolean }> };
       expect(initialJobs.data.find(item => item.id === job.id)?.isSaved).toBe(false);
 
-      const saveResponse = await fetch(jobEndpoint, { method: "POST" });
+      const saveResponse = await authenticatedFetch(jobEndpoint, { method: "POST" });
       const saved = await saveResponse.json() as { data?: { jobId: string; isSaved: boolean } };
       expect(saveResponse.status).toBe(201);
       expect(saved.data).toMatchObject({ jobId: job.id, isSaved: true });
 
-      const repeatedSave = await fetch(jobEndpoint, { method: "POST" });
+      const repeatedSave = await authenticatedFetch(jobEndpoint, { method: "POST" });
       expect(repeatedSave.status).toBe(201);
-      expect(await prisma.savedJob.count({ where: { jobId: job.id, userId: "local" } })).toBe(1);
+      expect(await prisma.userSavedJob.count({ where: { jobId: job.id, userId: testUserId } })).toBe(1);
 
-      const savedJobsResponse = await fetch(base + "/api/saved-jobs");
+      const savedJobsResponse = await authenticatedFetch(base + "/api/saved-jobs");
       const savedJobs = await savedJobsResponse.json() as { data?: Array<{ id: string; title: string }>; count: number };
       expect(savedJobsResponse.status).toBe(200);
       expect(savedJobs.count).toBe(1);
       expect(savedJobs.data?.[0]).toMatchObject({ id: job.id, title: "Platform Engineer" });
 
-      const removeResponse = await fetch(jobEndpoint, { method: "DELETE" });
+      const removeResponse = await authenticatedFetch(jobEndpoint, { method: "DELETE" });
       expect(removeResponse.status).toBe(200);
-      expect(await prisma.savedJob.count({ where: { jobId: job.id, userId: "local" } })).toBe(0);
+      expect(await prisma.userSavedJob.count({ where: { jobId: job.id, userId: testUserId } })).toBe(0);
     } finally {
       await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
     }
@@ -518,14 +557,14 @@ describe("job sync SQLite integration", () => {
       const address = server.address();
       if (!address || typeof address === "string") throw new Error("Test server did not bind to a TCP port");
       const base = "http://127.0.0.1:" + address.port;
-      const response = await fetch(base + "/api/jobs?company=Acme&employmentType=FULL_TIME&workMode=REMOTE&skills=node.js,postgres&sort=NEWEST");
+      const response = await authenticatedFetch(base + "/api/jobs?company=Acme&employmentType=FULL_TIME&workMode=REMOTE&skills=node.js,postgres&sort=NEWEST");
       const body = await response.json() as { data: Array<{ id: string; workMode: string }>; total: number };
       expect(response.status).toBe(200);
       expect(body.total).toBe(1);
       expect(body.data).toHaveLength(1);
       expect(body.data[0]).toMatchObject({ id: remoteJob.id, workMode: "REMOTE" });
 
-      const invalidResponse = await fetch(base + "/api/jobs?workMode=SPACE");
+      const invalidResponse = await authenticatedFetch(base + "/api/jobs?workMode=SPACE");
       expect(invalidResponse.status).toBe(400);
     } finally {
       await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
@@ -540,7 +579,7 @@ describe("job sync SQLite integration", () => {
       const address = server.address();
       if (!address || typeof address === "string") throw new Error("Test server did not bind to a TCP port");
       const base = "http://127.0.0.1:" + address.port;
-      const createResponse = await fetch(base + "/api/saved-searches", {
+      const createResponse = await authenticatedFetch(base + "/api/saved-searches", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -552,8 +591,8 @@ describe("job sync SQLite integration", () => {
       expect(createResponse.status).toBe(201);
       expect(created.data?.name).toBe("Remote backend roles");
       const searchId = created.data!.id;
-      await prisma.savedSearch.update({
-        where: { id: searchId },
+      await prisma.userSavedSearch.updateMany({
+        where: { id: searchId, userId: testUserId },
         data: { lastCheckedAt: new Date(Date.now() - 10_000) }
       });
 
@@ -587,24 +626,24 @@ describe("job sync SQLite integration", () => {
       });
 
       const alertUrl = base + "/api/saved-searches/" + searchId + "/alerts";
-      const alertResponse = await fetch(alertUrl);
+      const alertResponse = await authenticatedFetch(alertUrl);
       const alertBody = await alertResponse.json() as { data: Array<{ id: string }>; count: number };
       expect(alertResponse.status).toBe(200);
       expect(alertBody.count).toBe(1);
       expect(alertBody.data[0].id).toBe(matchingJob.id);
 
-      const repeatedCheck = await fetch(alertUrl);
+      const repeatedCheck = await authenticatedFetch(alertUrl);
       const repeatedBody = await repeatedCheck.json() as { data: unknown[]; count: number };
       expect(repeatedBody.count).toBe(0);
 
-      const listResponse = await fetch(base + "/api/saved-searches");
+      const listResponse = await authenticatedFetch(base + "/api/saved-searches");
       const listBody = await listResponse.json() as { data: Array<{ id: string; filters: { workMode: string } }> };
       expect(listBody.data).toHaveLength(1);
       expect(listBody.data[0]).toMatchObject({ id: searchId, filters: { workMode: "REMOTE" } });
 
-      const deleteResponse = await fetch(base + "/api/saved-searches/" + searchId, { method: "DELETE" });
+      const deleteResponse = await authenticatedFetch(base + "/api/saved-searches/" + searchId, { method: "DELETE" });
       expect(deleteResponse.status).toBe(200);
-      const missingResponse = await fetch(alertUrl);
+      const missingResponse = await authenticatedFetch(alertUrl);
       expect(missingResponse.status).toBe(404);
     } finally {
       await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
@@ -636,7 +675,7 @@ describe("job sync SQLite integration", () => {
       await new Promise<void>(resolve => server.once("listening", resolve));
       const address = server.address();
       if (!address || typeof address === "string") throw new Error("Test server did not bind to a TCP port");
-      const response = await fetch("http://127.0.0.1:" + address.port + "/api/jobs?limit=10");
+      const response = await authenticatedFetch("http://127.0.0.1:" + address.port + "/api/jobs?limit=10");
       const body = await response.json() as { data: Array<{ id: string; description: string; employmentType: string; lastVerifiedAt: string | null; discoveredAt: string }> };
       expect(response.status).toBe(200);
       const result = body.data.find(item => item.id === job.id);
