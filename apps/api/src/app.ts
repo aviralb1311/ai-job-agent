@@ -1,4 +1,5 @@
 import express from "express";
+import { register, login, logout, currentSession } from "./auth.js";
 import cors from "cors";
 import { config } from "./config.js";
 import { prisma } from "./db.js";
@@ -12,10 +13,17 @@ import { inferWorkMode, matchesRequiredSkills, matchesWorkMode, textRelevance } 
 import { FOLLOW_UP_BUCKETS, isDateKey, matchesFollowUpBucket, type FollowUpBucket } from "./jobs/follow-ups.js";
 
 export const app = express();
-app.use(cors({ origin: config.CORS_ORIGIN }));
+app.use(cors({ origin: config.CORS_ORIGIN, credentials: true }));
 app.use(express.json({ limit: "1mb" }));
 
 const SUPPORTED_PROVIDERS = ["GREENHOUSE", "LEVER", "ASHBY"] as const;
+
+// Authentication endpoints. Private API routes are migrated to session ownership
+// in the next step; do not expose this branch publicly until that work is complete.
+app.post("/api/auth/register", register);
+app.post("/api/auth/login", login);
+app.post("/api/auth/logout", logout);
+app.get("/api/auth/me", currentSession);
 
 app.get("/api/health", async (_req, res) => {
   try {
