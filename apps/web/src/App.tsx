@@ -752,13 +752,18 @@ export function App() {
         // Public job browsing remains available without a session.
       }
     })();
-  }, [loadJobs]);
+  }, [loadJobs, user]);
 
   useEffect(() => {
-    void loadSources();
     void loadCatalog();
-    void loadSyncHistory();
-  }, [loadSources, loadCatalog, loadSyncHistory]);
+    if (user?.role === "ADMIN") {
+      void loadSources();
+      void loadSyncHistory();
+    } else {
+      setSources([]);
+      setSyncRuns([]);
+    }
+  }, [user, loadSources, loadCatalog, loadSyncHistory]);
 
   const sourceCount = new Set(jobs.map(job => job.source)).size;
 
