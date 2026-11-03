@@ -41,7 +41,7 @@ These are public board identifiers, not arbitrary company names. Check each prov
 ## Scripts
 - `npm run dev` — API and frontend
 - `npm run build` — build all workspaces
-- `npm run test` — run API tests
+- `npm run test` — prepare and run API tests against a separate `apps/api/integration-test.db` SQLite database; test fixtures and sync history cannot pollute your development `dev.db`.
 - `npm run test:live-sources -w @job-agent/api` — manually smoke-test live public feeds (requires three board IDs)
 - `npm run db:generate` — generate Prisma client
 - `npm run db:migrate` — create/apply local migration

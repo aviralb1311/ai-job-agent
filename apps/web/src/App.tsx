@@ -734,6 +734,7 @@ export function App() {
 
   useEffect(() => {
     void loadSources();
+    void loadCatalog();
     void loadSyncHistory();
     void loadProfile();
     void loadApplications();
@@ -747,7 +748,7 @@ export function App() {
         // Resume details are optional; profile preferences remain usable.
       }
     })();
-  }, [loadSources, loadSyncHistory, loadProfile, loadApplications, loadSavedSearches]);
+  }, [loadSources, loadCatalog, loadSyncHistory, loadProfile, loadApplications, loadSavedSearches]);
 
   const sourceCount = new Set(jobs.map(job => job.source)).size;
 
