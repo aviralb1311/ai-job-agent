@@ -213,3 +213,13 @@ The scheduler runs inside the API process, uses the existing sync service and pe
 - The dashboard displays the state on each job and adds stale/overdue counts to each configured source. Use **Revalidate board** to fetch the latest public board snapshot through its existing provider connector.
 - Only a successful, non-empty, fully processed source sync updates verification timestamps and listing lifecycle state. Empty, failed, or partial syncs do not refresh every job's timestamp or deactivate missing listings.
 - The existing inactive state remains reserved for postings absent from a complete, non-empty provider snapshot (Phase 1.25). Always open the employer's original listing before applying.
+
+
+## Application follow-up queue (Phase 1.27)
+
+- The dashboard includes a dedicated follow-up queue for tracked applications with a follow-up date.
+- Reminders are grouped by the user's local calendar date into **Overdue**, **Today**, and **Upcoming**; **All** shows every scheduled reminder. The browser supplies its local date to the API so date-only reminders are not classified using the server's timezone.
+- Each reminder shows the role, company, location when available, application status, saved notes, due date, and a link to the original employer listing.
+- Rejected and withdrawn applications are excluded from the active reminder queue. Existing application tracking records and dates are not modified.
+- The queue is read-only: users continue to edit or clear follow-up dates in the existing application tracker. No email, push notification, recruiter message, or automated application action is sent.
+- The API endpoint is `GET /api/applications/follow-ups?bucket=OVERDUE|TODAY|UPCOMING|ALL&today=YYYY-MM-DD`. The `today` value is validated and defaults to the API server's UTC date when omitted.
