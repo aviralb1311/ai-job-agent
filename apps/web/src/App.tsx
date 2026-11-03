@@ -39,6 +39,7 @@ type JobSource = {
   displayName: string | null;
   enabled: boolean;
   createdAt: string;
+  health?: { listingCount: number; verifiedListingCount: number; missingDescriptionCount: number; lastVerifiedAt: string | null; freshness: "NO_LISTINGS" | "NOT_VERIFIED" | "STALE" | "RECENTLY_VERIFIED" };
 };
 type SourceCatalogEntry = { id: string; provider: Provider; boardId: string; displayName: string; description: string; careersUrl: string; focus: string };
 type SourcePreview = {
@@ -820,6 +821,14 @@ export function App() {
         {sources.map(item => <article className="source-item" key={item.id}>
           <div className="source-identity"><span className={`source source-${item.provider.toLowerCase()}`}>{item.provider}</span><strong>{item.displayName || item.boardId}</strong><small>Board ID: {item.boardId}</small></div>
           <span className={item.enabled ? "enabled-label" : "disabled-label"}>{item.enabled ? "Enabled" : "Disabled"}</span>
+          <div className="source-health" aria-label="Stored listing freshness">
+            <strong>{item.health?.listingCount ?? 0} listings</strong>
+            <span>{item.health?.verifiedListingCount ?? 0} verified · {item.health?.missingDescriptionCount ?? 0} missing descriptions</span>
+            <small className={`freshness-${(item.health?.freshness ?? "NO_LISTINGS").toLowerCase()}`}>
+              {(item.health?.freshness ?? "NO_LISTINGS").replaceAll("_", " ").toLowerCase()}
+              {item.health?.lastVerifiedAt ? ` · ${new Date(item.health.lastVerifiedAt).toLocaleDateString()}` : ""}
+            </small>
+          </div>
           <button className="small-action secondary" onClick={() => void toggleSource(item)}>{item.enabled ? "Disable" : "Enable"}</button>
           <button className="small-action danger-action" onClick={() => void removeSource(item)}>Remove</button>
         </article>)}
