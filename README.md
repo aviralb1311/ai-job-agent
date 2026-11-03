@@ -145,6 +145,8 @@ The API exposes a starter catalog of candidate Greenhouse, Lever, and Ashby boar
 
 - Save the current keyword, location, company, source, employment type, work-mode, and required-skill filters under a custom name.
 - Reapply a saved search to restore its filters in the dashboard.
+
+- Saved searches also retain the selected sort order (newest, profile match, or relevance) when reapplied.
 - **Check new jobs** compares matching postings discovered since the previous check and displays up to 50 new results with links to the original employer listings.
 - Each check advances that search's last-checked timestamp, so the same posting is not repeatedly reported as new.
 - Alerts are checked manually inside the app. No email, push notification, background polling, application submission, or employer contact is performed.
