@@ -795,20 +795,23 @@ export function App() {
 
   useEffect(() => {
     void loadJobs();
+  }, [loadJobs]);
+
+  useEffect(() => {
     void (async () => {
       try {
         const response = await apiFetch(`${API}/api/auth/me`);
         if (!response.ok) return;
         const body = await response.json() as { data?: { user?: AuthUser } };
         if (body.data?.user) {
-          setUser(body.data.user);
+          setUser(current => current?.id === body.data!.user!.id ? current : body.data!.user!);
           await loadPrivateWorkspace();
         }
       } catch {
         // Public job browsing remains available without a session.
       }
     })();
-  }, [loadJobs, user]);
+  }, []);
 
   useEffect(() => {
     void loadCatalog();
