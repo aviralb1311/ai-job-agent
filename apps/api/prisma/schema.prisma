@@ -230,6 +230,8 @@ model UserApplicationDraft {
   coverLetter     String   @default("")
   reviewNotesJson String   @default("[]")
   status          String   @default("DRAFT")
+  workflowStatus  String   @default("DRAFT")
+  approvedAt      DateTime?
   reviewedAt      DateTime?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
