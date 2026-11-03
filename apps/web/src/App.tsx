@@ -43,6 +43,9 @@ type SourcePreview = {
 };
 type CandidateProfile = { skills: string[]; preferredRoles: string[]; locations: string[]; remotePreference: "ANY" | "REMOTE" | "ONSITE" | "HYBRID" };
 type ResumeDraft = { skills: string[]; education: string[]; experience: string[]; projects: string[]; certifications: string[] };
+type ApplicationStatus = "SAVED" | "PREPARING" | "APPLIED" | "INTERVIEW" | "OFFER" | "REJECTED" | "WITHDRAWN";
+type ApplicationTracking = { status: ApplicationStatus; notes: string; appliedAt: string; followUpAt: string };
+type TrackedApplication = ApplicationTracking & { jobId: string; job: { id: string; title: string; company: string; location: string | null; applicationUrl: string } };
 type ApplicationDraft = { id: string; jobId: string; resumeSummary: string; highlights: string[]; coverLetter: string; reviewNotes: string[]; status: "DRAFT" | "REVIEWED"; reviewedAt: string | null; createdAt: string; updatedAt: string };
 type JobFitAnalysis = {
   score: number | null;
@@ -91,6 +94,10 @@ export function App() {
   const [applicationDraft, setApplicationDraft] = useState<{ jobId: string; data: ApplicationDraft } | null>(null);
   const [draftBusy, setDraftBusy] = useState<string | null>(null);
   const [draftMessage, setDraftMessage] = useState("");
+  const [trackingByJob, setTrackingByJob] = useState<Record<string, ApplicationTracking>>({});
+  const [applicationRecords, setApplicationRecords] = useState<TrackedApplication[]>([]);
+  const [trackingSaving, setTrackingSaving] = useState<string | null>(null);
+  const [trackingMessage, setTrackingMessage] = useState("");
 
   const loadJobs = useCallback(async (filters = { query, location, source }) => {
     setLoading(true);
