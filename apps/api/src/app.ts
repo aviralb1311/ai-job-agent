@@ -1,5 +1,5 @@
 import express from "express";
-import { register, login, logout, currentSession } from "./auth.js";
+import { register, login, logout, currentSession, requireAuth } from "./auth.js";
 import cors from "cors";
 import { config } from "./config.js";
 import { prisma } from "./db.js";
@@ -18,8 +18,8 @@ app.use(express.json({ limit: "1mb" }));
 
 const SUPPORTED_PROVIDERS = ["GREENHOUSE", "LEVER", "ASHBY"] as const;
 
-// Authentication endpoints. Private API routes are migrated to session ownership
-// in the next step; do not expose this branch publicly until that work is complete.
+// Account endpoints. Private API routes are migrated in small, ownership-safe steps;
+ // do not expose this branch publicly until every private route is protected.
 app.post("/api/auth/register", register);
 app.post("/api/auth/login", login);
 app.post("/api/auth/logout", logout);
@@ -54,16 +54,16 @@ function parseProfile(row: { skillsJson: string; preferredRoles: string; locatio
   };
 }
 
-app.get("/api/profile", async (_req, res) => {
+app.get("/api/profile", requireAuth, async (req, res) => {
   try {
-    const profile = await prisma.candidateProfile.findUnique({ where: { id: "default" } });
+    const profile = await prisma.userCandidateProfile.findUnique({ where: { userId: res.locals.userId } });
     res.json({ data: parseProfile(profile) });
   } catch (error) {
     res.status(500).json({ error: "Unable to retrieve candidate profile", detail: error instanceof Error ? error.message : "Unknown error" });
   }
 });
 
-app.put("/api/profile", async (req, res) => {
+app.put("/api/profile", requireAuth, async (req, res) => {
   const body = req.body ?? {};
   const validList = (value: unknown): value is string[] =>
     Array.isArray(value) && value.length <= 50 && value.every(item => typeof item === "string" && item.trim().length > 0 && item.length <= 80);
@@ -80,8 +80,10 @@ app.put("/api/profile", async (req, res) => {
       locations: JSON.stringify(clean(body.locations)),
       remotePreference: body.remotePreference as CandidatePreferences["remotePreference"]
     };
-    const saved = await prisma.candidateProfile.upsert({
-      where: { id: "default" }, create: { id: "default", ...data }, update: data
+    const saved = await prisma.userCandidateProfile.upsert({
+      where: { userId: res.locals.userId },
+      create: { userId: res.locals.userId, ...data },
+      update: data
     });
     res.json({ data: parseProfile(saved) });
   } catch (error) {
@@ -98,7 +100,7 @@ function readJsonList(value: string): string[] {
   } catch { return []; }
 }
 
-app.post("/api/resume/parse", express.raw({
+app.post("/api/resume/parse", requireAuth, express.raw({
   type: ["application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
   limit: "5mb"
 }), async (req, res) => {
@@ -122,7 +124,7 @@ app.post("/api/resume/parse", express.raw({
   }
 });
 
-app.put("/api/profile/resume", async (req, res) => {
+app.put("/api/profile/resume", requireAuth, async (req, res) => {
   const body = req.body ?? {};
   const validList = (value: unknown): value is string[] =>
     Array.isArray(value) && value.length <= 50 && value.every(item =>
@@ -141,9 +143,9 @@ app.put("/api/profile/resume", async (req, res) => {
       projectsJson: JSON.stringify(clean(body.projects)),
       certificationsJson: JSON.stringify(clean(body.certifications))
     };
-    const saved = await prisma.candidateProfile.upsert({
-      where: { id: "default" },
-      create: { id: "default", ...data },
+    const saved = await prisma.userCandidateProfile.upsert({
+      where: { userId: res.locals.userId },
+      create: { userId: res.locals.userId, ...data },
       update: data
     });
     res.json({ data: {
@@ -158,9 +160,9 @@ app.put("/api/profile/resume", async (req, res) => {
   }
 });
 
-app.get("/api/profile/resume", async (_req, res) => {
+app.get("/api/profile/resume", requireAuth, async (req, res) => {
   try {
-    const profile = await prisma.candidateProfile.findUnique({ where: { id: "default" } });
+    const profile = await prisma.userCandidateProfile.findUnique({ where: { userId: res.locals.userId } });
     res.json({ data: {
       skills: readJsonList(profile?.skillsJson ?? "[]"),
       education: readJsonList(profile?.educationJson ?? "[]"),
