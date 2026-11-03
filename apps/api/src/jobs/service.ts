@@ -103,6 +103,7 @@ async function runSync(): Promise<JobSyncSummary> {
 
           const data = {
             ...normalized,
+            sourceBoardId: source.boardId,
             publishedAt: normalized.publishedAt ? new Date(normalized.publishedAt) : null,
             canonicalUrl,
             lastVerifiedAt: new Date(),
