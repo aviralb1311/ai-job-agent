@@ -66,7 +66,7 @@ describe("job sync SQLite integration", () => {
     });
     await prisma.job.create({
       data: {
-        source: "GREENHOUSE", externalId: "health-verified", title: "Verified Role",
+        source: "GREENHOUSE", sourceBoardId: "health-board", externalId: "health-verified", title: "Verified Role",
         company: "Health Board", description: "A real description",
         applicationUrl: "https://jobs.example.test/verified",
         canonicalUrl: "https://jobs.example.test/verified",
@@ -75,7 +75,7 @@ describe("job sync SQLite integration", () => {
     });
     await prisma.job.create({
       data: {
-        source: "GREENHOUSE", externalId: "health-empty", title: "Missing Description",
+        source: "GREENHOUSE", sourceBoardId: "health-board", externalId: "health-empty", title: "Missing Description",
         company: "Health Board", description: "",
         applicationUrl: "https://jobs.example.test/empty",
         canonicalUrl: "https://jobs.example.test/empty"
