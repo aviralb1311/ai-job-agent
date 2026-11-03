@@ -802,6 +802,7 @@ export function App() {
     } finally {
       setUser(null);
       setProfile(EMPTY_PROFILE);
+      setContact({ fullName: "", phone: "", city: "", state: "", pinCode: "", linkedinUrl: "", githubUrl: "", portfolioUrl: "" });
       setProfileSkills("");
       setProfileRoles("");
       setProfileLocations("");
