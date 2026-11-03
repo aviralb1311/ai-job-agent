@@ -129,3 +129,13 @@ The API exposes a starter catalog of candidate Greenhouse, Lever, and Ashby boar
 - Saved records are linked to jobs and are removed automatically if a job record is deleted.
 - This shortlist is separate from application tracking: bookmarking a role does not mark it as applied or create an application record.
 - After pulling this phase, run `npm run db:generate` and `npm run db:push` from the repository root to apply the SavedJob-to-Job relation in the local SQLite database.
+
+
+## Advanced job search and filtering (Phase 1.18)
+
+- Combine the existing keyword, location and source filters with company, employment type, work mode, and required-skill filters.
+- Required skills use AND semantics: every comma-separated skill must be present in a job's detected skill tags. Skill matching is case-insensitive and based on the existing deterministic extractor.
+- Work mode is inferred only from explicit wording in the public listing (remote, hybrid, or onsite/in-office). Listings without clear wording are classified as **Unknown**, never silently treated as onsite.
+- Sort results by newest publication/discovery date, profile match score, or overall relevance (profile match first, then title/company/description text relevance).
+- Filters are combined server-side and the API reports the total number of matching jobs before the 100-result response cap.
+- The match score remains a transparent heuristic, not a hiring prediction. Work-mode classification is a keyword heuristic and should be checked against the original employer listing.

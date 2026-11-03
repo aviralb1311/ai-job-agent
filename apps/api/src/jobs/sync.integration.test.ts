@@ -363,4 +363,56 @@ describe("job sync SQLite integration", () => {
     }
   });
 
+
+  it("combines advanced filters and sorts matching jobs", async () => {
+    const remoteJob = await prisma.job.create({
+      data: {
+        source: "GREENHOUSE",
+        externalId: "advanced-search-remote",
+        title: "Backend Engineer",
+        company: "Acme Systems",
+        location: "Remote - India",
+        description: "Build APIs with Node.js and PostgreSQL.",
+        employmentType: "FULL_TIME",
+        applicationUrl: "https://jobs.example.test/remote",
+        canonicalUrl: "https://jobs.example.test/remote",
+        publishedAt: new Date("2026-10-30T10:00:00Z"),
+        skillsJson: JSON.stringify(["Node.js", "PostgreSQL"])
+      }
+    });
+    await prisma.job.create({
+      data: {
+        source: "LEVER",
+        externalId: "advanced-search-onsite",
+        title: "Backend Intern",
+        company: "Acme Systems",
+        location: "Bengaluru",
+        description: "On-site internship using Node.js.",
+        employmentType: "INTERNSHIP",
+        applicationUrl: "https://jobs.example.test/onsite",
+        canonicalUrl: "https://jobs.example.test/onsite",
+        publishedAt: new Date("2026-11-01T10:00:00Z"),
+        skillsJson: JSON.stringify(["Node.js"])
+      }
+    });
+    const server = app.listen(0);
+    try {
+      await new Promise<void>(resolve => server.once("listening", resolve));
+      const address = server.address();
+      if (!address || typeof address === "string") throw new Error("Test server did not bind to a TCP port");
+      const base = "http://127.0.0.1:" + address.port;
+      const response = await fetch(base + "/api/jobs?company=Acme&employmentType=FULL_TIME&workMode=REMOTE&skills=node.js,postgres&sort=NEWEST");
+      const body = await response.json() as { data: Array<{ id: string; workMode: string }>; total: number };
+      expect(response.status).toBe(200);
+      expect(body.total).toBe(1);
+      expect(body.data).toHaveLength(1);
+      expect(body.data[0]).toMatchObject({ id: remoteJob.id, workMode: "REMOTE" });
+
+      const invalidResponse = await fetch(base + "/api/jobs?workMode=SPACE");
+      expect(invalidResponse.status).toBe(400);
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+    }
+  });
+
 });

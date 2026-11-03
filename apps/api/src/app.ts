@@ -8,6 +8,7 @@ import { scoreJobMatch, type CandidatePreferences } from "./jobs/intelligence.js
 import { parseResumeBuffer, ResumeParseError } from "./jobs/resume-parser.js";
 import { analyzeJobFit } from "./jobs/fit-analysis.js";
 import { generateApplicationDraft } from "./jobs/application-draft.js";
+import { inferWorkMode, matchesRequiredSkills, matchesWorkMode, textRelevance } from "./jobs/search.js";
 
 export const app = express();
 app.use(cors({ origin: config.CORS_ORIGIN }));
@@ -229,48 +230,92 @@ app.get("/api/jobs", async (req, res) => {
   try {
     const q = String(req.query.q ?? "").trim();
     const location = String(req.query.location ?? "").trim();
+    const company = String(req.query.company ?? "").trim();
     const source = String(req.query.source ?? "").trim().toUpperCase();
+    const employmentType = String(req.query.employmentType ?? "").trim().toUpperCase();
+    const workMode = String(req.query.workMode ?? "ANY").trim().toUpperCase();
+    const sort = String(req.query.sort ?? "NEWEST").trim().toUpperCase();
+    const requiredSkills = String(req.query.skills ?? "").split(",").map(skill => skill.trim()).filter(Boolean);
     const parsedLimit = Number(req.query.limit ?? 50);
     const take = Number.isFinite(parsedLimit) ? Math.min(Math.max(Math.floor(parsedLimit), 1), 100) : 50;
+    const employmentTypes = ["FULL_TIME", "PART_TIME", "INTERNSHIP", "CONTRACT", "UNKNOWN"];
+    const workModes = ["ANY", "REMOTE", "HYBRID", "ONSITE", "UNKNOWN"];
+    const sortOptions = ["NEWEST", "MATCH", "RELEVANCE"];
+
+    if (employmentType && !employmentTypes.includes(employmentType)) {
+      res.status(400).json({ error: "employmentType must be FULL_TIME, PART_TIME, INTERNSHIP, CONTRACT or UNKNOWN." });
+      return;
+    }
+    if (!workModes.includes(workMode)) {
+      res.status(400).json({ error: "workMode must be ANY, REMOTE, HYBRID, ONSITE or UNKNOWN." });
+      return;
+    }
+    if (!sortOptions.includes(sort)) {
+      res.status(400).json({ error: "sort must be NEWEST, MATCH or RELEVANCE." });
+      return;
+    }
+    if (requiredSkills.length > 20 || requiredSkills.some(skill => skill.length > 80)) {
+      res.status(400).json({ error: "Select up to 20 required skills, each no longer than 80 characters." });
+      return;
+    }
 
     const where = {
       AND: [
         q ? { OR: [{ title: { contains: q } }, { company: { contains: q } }, { description: { contains: q } }] } : {},
         location ? { location: { contains: location } } : {},
-        source ? { source } : {}
+        company ? { company: { contains: company } } : {},
+        source ? { source } : {},
+        employmentType ? { employmentType } : {}
       ]
     };
 
-    const [jobs, total, savedRecords] = await Promise.all([
-      prisma.job.findMany({
-        where,
-        orderBy: [{ publishedAt: "desc" }, { discoveredAt: "desc" }],
-        take
-      }),
-      prisma.job.count({ where }),
+    const [jobs, savedRecords, profileRow] = await Promise.all([
+      prisma.job.findMany({ where, orderBy: [{ publishedAt: "desc" }, { discoveredAt: "desc" }] }),
       prisma.savedJob.findMany({
         where: { userId: LOCAL_SAVED_JOBS_USER_ID },
         select: { jobId: true }
-      })
+      }),
+      prisma.candidateProfile.findUnique({ where: { id: "default" } })
     ]);
     const savedJobIds = new Set(savedRecords.map(record => record.jobId));
-
-    const profileRow = await prisma.candidateProfile.findUnique({ where: { id: "default" } });
     const profile = parseProfile(profileRow);
     const enriched = jobs.map(job => {
-      let skills: string[] = [];
-      try {
-        const parsed: unknown = JSON.parse(job.skillsJson);
-        if (Array.isArray(parsed)) skills = parsed.filter((item): item is string => typeof item === "string");
-      } catch { /* malformed stored metadata is treated as empty */ }
+      const skills = readJsonList(job.skillsJson);
       return {
         ...job,
         skills,
+        workMode: inferWorkMode(job.location, job.description),
         isSaved: savedJobIds.has(job.id),
         match: scoreJobMatch({ title: job.title, location: job.location, category: job.category, skills }, profile)
       };
+    }).filter(job =>
+      matchesWorkMode(job.location, job.description, workMode) &&
+      matchesRequiredSkills(job.skills, requiredSkills)
+    );
+
+    const newestFirst = (a: typeof enriched[number], b: typeof enriched[number]) =>
+      new Date(b.publishedAt ?? b.discoveredAt).getTime() - new Date(a.publishedAt ?? a.discoveredAt).getTime();
+    if (sort === "MATCH") {
+      enriched.sort((a, b) => (b.match.score ?? -1) - (a.match.score ?? -1) || newestFirst(a, b));
+    } else if (sort === "RELEVANCE") {
+      enriched.sort((a, b) =>
+        (b.match.score ?? -1) - (a.match.score ?? -1) ||
+        textRelevance(b.title, b.company, b.description, q) - textRelevance(a.title, a.company, a.description, q) ||
+        newestFirst(a, b)
+      );
+    } else {
+      enriched.sort(newestFirst);
+    }
+
+    const total = enriched.length;
+    const data = enriched.slice(0, take);
+    res.json({
+      data,
+      count: data.length,
+      total,
+      profileConfigured: Boolean(profile.skills.length || profile.preferredRoles.length || profile.locations.length || profile.remotePreference !== "ANY"),
+      filters: { employmentType: employmentType || null, workMode, company: company || null, skills: requiredSkills, sort }
     });
-    res.json({ data: enriched, count: enriched.length, total, profileConfigured: Boolean(profile.skills.length || profile.preferredRoles.length || profile.locations.length || profile.remotePreference !== "ANY") });
   } catch (error) {
     res.status(500).json({
       error: "Unable to retrieve jobs",
