@@ -63,67 +63,101 @@ async function runSync(): Promise<JobSyncSummary> {
       ];
 
   for (const source of sources) {
+    const startedAt = new Date();
+    const startedMs = Date.now();
+    let fetched = 0;
+    let inserted = 0;
+    let updated = 0;
+    let duplicatesSkipped = 0;
+    let sourceFetchFailed = false;
+    const sourceErrors: string[] = [];
     const connector = getConnector(source.provider);
+
     if (!connector) {
-      summary.errors.push(`${source.provider}/${source.boardId}: Unsupported provider`);
-      continue;
-    }
+      sourceFetchFailed = true;
+      sourceErrors.push(`${source.provider}/${source.boardId}: Unsupported provider`);
+    } else {
+      try {
+        const jobs = await connector.fetchBoard(source.boardId);
+        fetched = jobs.length;
+        summary.fetched += jobs.length;
 
-    try {
-      const jobs = await connector.fetchBoard(source.boardId);
-      summary.fetched += jobs.length;
+        for (const raw of jobs) {
+          try {
+            const normalized = normalizeJob(connector.provider, {
+              ...raw,
+              company: source.displayName?.trim() || raw.company
+            });
+            const canonicalUrl = canonicalizeUrl(normalized.applicationUrl);
+            const where = {
+              source_externalId: {
+                source: normalized.source,
+                externalId: normalized.externalId
+              }
+            };
 
-      for (const raw of jobs) {
-        try {
-          const normalized = normalizeJob(connector.provider, {
-            ...raw,
-            company: source.displayName?.trim() || raw.company
-          });
-          const canonicalUrl = canonicalizeUrl(normalized.applicationUrl);
-          const where = {
-            source_externalId: {
-              source: normalized.source,
-              externalId: normalized.externalId
+            const existing = await prisma.job.findUnique({ where });
+            const duplicate = await prisma.job.findFirst({
+              where: {
+                canonicalUrl,
+                ...(existing ? { NOT: { id: existing.id } } : {})
+              },
+              select: { id: true }
+            });
+
+            if (duplicate) {
+              duplicatesSkipped++;
+              summary.duplicatesSkipped++;
+              continue;
             }
-          };
 
-          const existing = await prisma.job.findUnique({ where });
-          const duplicate = await prisma.job.findFirst({
-            where: {
+            const data = {
+              ...normalized,
+              sourceBoardId: source.boardId,
+              publishedAt: normalized.publishedAt ? new Date(normalized.publishedAt) : null,
               canonicalUrl,
-              ...(existing ? { NOT: { id: existing.id } } : {})
-            },
-            select: { id: true }
-          });
+              lastVerifiedAt: new Date(),
+              status: "ACTIVE"
+            };
 
-          if (duplicate) {
-            summary.duplicatesSkipped++;
-            continue;
+            await prisma.job.upsert({ where, create: data, update: data });
+            if (existing) {
+              updated++;
+              summary.updated++;
+            } else {
+              inserted++;
+              summary.inserted++;
+            }
+          } catch (error) {
+            const message = `${connector.provider}/${source.boardId}/${raw.id}: ${error instanceof Error ? error.message : "Unknown job error"}`;
+            sourceErrors.push(message);
+            summary.errors.push(message);
           }
-
-          const data = {
-            ...normalized,
-            sourceBoardId: source.boardId,
-            publishedAt: normalized.publishedAt ? new Date(normalized.publishedAt) : null,
-            canonicalUrl,
-            lastVerifiedAt: new Date(),
-            status: "ACTIVE"
-          };
-
-          await prisma.job.upsert({ where, create: data, update: data });
-          if (existing) summary.updated++;
-          else summary.inserted++;
-        } catch (error) {
-          summary.errors.push(
-            `${connector.provider}/${source.boardId}/${raw.id}: ${error instanceof Error ? error.message : "Unknown job error"}`
-          );
         }
+      } catch (error) {
+        sourceFetchFailed = true;
+        const message = `${connector.provider}/${source.boardId}: ${error instanceof Error ? error.message : "Unknown source error"}`;
+        sourceErrors.push(message);
+        summary.errors.push(message);
       }
-    } catch (error) {
-      summary.errors.push(
-        `${connector.provider}/${source.boardId}: ${error instanceof Error ? error.message : "Unknown source error"}`
-      );
     }
+
+    const status = sourceFetchFailed ? "FAILED" : sourceErrors.length ? "PARTIAL" : "SUCCESS";
+    await prisma.syncRun.create({
+      data: {
+        provider: source.provider,
+        boardId: source.boardId,
+        status,
+        fetched,
+        inserted,
+        updated,
+        duplicatesSkipped,
+        errorsJson: JSON.stringify(sourceErrors),
+        durationMs: Date.now() - startedMs,
+        startedAt,
+        completedAt: new Date()
+      }
+    });
   }
 
   return summary;
