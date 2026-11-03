@@ -79,3 +79,7 @@
 
 /* Phase 1.23: individual source sync control */
 .source-item .small-action:disabled{opacity:.55;cursor:not-allowed}
+
+
+/* Phase 1.26: per-listing revalidation age */
+.revalidation-badge{display:inline-flex;align-items:center;border-radius:20px;padding:4px 8px;font-size:10px;font-weight:800;background:#edf8f2;color:#24734d}.revalidation-stale{background:#fff6e9;color:#875b1e}.revalidation-expired{background:#fff0f0;color:#a52c2c}.revalidation-unverified{background:#f1f3f7;color:#68758a}.job-top{flex-wrap:wrap}
