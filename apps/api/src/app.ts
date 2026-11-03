@@ -632,6 +632,8 @@ app.put("/api/jobs/:id/application-draft", requireAuth, async (req, res) => {
         highlightsJson: JSON.stringify([...new Set(body.highlights.map((item: string) => item.trim()))]),
         coverLetter: body.coverLetter,
         status: "DRAFT",
+        workflowStatus: "DRAFT",
+        approvedAt: null,
         reviewedAt: null
       }
     });
