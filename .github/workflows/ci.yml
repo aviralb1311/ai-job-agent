@@ -43,12 +43,12 @@ jobs:
       - name: Prepare SQLite integration database
         run: npm run db:push
         env:
-          DATABASE_URL: file:./integration.db
+          DATABASE_URL: file:./integration-test.db
 
       - name: Run API tests
         run: npm run test
         env:
-          DATABASE_URL: file:./integration.db
+          DATABASE_URL: file:./integration-test.db
 
       - name: Audit production and development dependencies
         run: npm audit
