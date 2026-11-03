@@ -1080,11 +1080,14 @@ export function App() {
         {!!job.skills?.length && <div className="skill-tags">{job.skills.slice(0, 8).map(skill => <span key={skill}>{skill}</span>)}</div>}
         {!!job.match?.matchedSkills.length && <p className="match-reason">Matched: {job.match.matchedSkills.join(", ")}</p>}
         <div className="job-actions">
-          {user && <button className="small-action secondary" type="button" disabled={savingJobId === job.id} onClick={() => void toggleSavedJob(job)} aria-label={job.isSaved ? "Remove from saved jobs" : "Save job"}>
-            {savingJobId === job.id ? "Saving…" : job.isSaved ? "★ Saved" : "☆ Save job"}
-          </button>
-          <button className="small-action secondary" type="button" disabled={analysisBusy === job.id} onClick={() => void analyzeFit(job.id)}>
-            {analysisBusy === job.id ? "Analyzing…" : analysis?.jobId === job.id ? "Hide fit analysis" : "Analyze resume fit"}
+          {user && <>
+            <button className="small-action secondary" type="button" disabled={savingJobId === job.id} onClick={() => void toggleSavedJob(job)} aria-label={job.isSaved ? "Remove from saved jobs" : "Save job"}>
+              {savingJobId === job.id ? "Saving…" : job.isSaved ? "★ Saved" : "☆ Save job"}
+            </button>
+            <button className="small-action secondary" type="button" disabled={analysisBusy === job.id} onClick={() => void analyzeFit(job.id)}>
+              {analysisBusy === job.id ? "Analyzing…" : analysis?.jobId === job.id ? "Hide fit analysis" : "Analyze resume fit"}
+            </button>
+          </>}
           <a href={job.applicationUrl} target="_blank" rel="noreferrer">View original listing ↗</a>
         </div>
 
@@ -1112,7 +1115,7 @@ export function App() {
         </details>}
         {user && <button className="small-action secondary" type="button" disabled={draftBusy === job.id} onClick={() => void openApplicationDraft(job.id)}>
           {draftBusy === job.id ? "Preparing…" : applicationDraft?.jobId === job.id ? "Hide application draft" : "Prepare application"}
-        </button>
+        </button>}
         {user && applicationDraft?.jobId === job.id && <div className="application-draft-panel">
           <div className="fit-analysis-top"><strong>Editable application draft</strong><span>{applicationDraft.data.status === "REVIEWED" ? "Reviewed for manual use" : "Draft · Not reviewed"}</span></div>
           <p className="form-hint">Generated only from your saved candidate profile and reviewed resume entries. Check every claim and personalize the wording. Nothing is submitted or sent.</p>
