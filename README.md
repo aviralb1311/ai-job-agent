@@ -118,3 +118,14 @@ The API exposes a starter catalog of candidate Greenhouse, Lever, and Ashby boar
 - Tracking records are stored locally in SQLite and linked to their job. Deleting a job cascades to its tracking record.
 - Status changes are user-entered. The tracker does not detect employer responses, send messages, submit applications, or automate follow-ups.
 - After pulling this phase, run `npm run db:generate` and `npm run db:push` from the repository root to add the `ApplicationTracking` table to the local SQLite database.
+
+
+## Saved jobs and shortlisting (Phase 1.17)
+
+- Save and remove jobs from a local shortlist directly from each job card.
+- Open the **Saved jobs** view to revisit bookmarked roles, including their detected skills and profile-match context.
+- Saving is idempotent: repeated clicks do not create duplicate records. The database enforces uniqueness for the local profile and job pair.
+- The MVP uses a single local profile key (`local`) because account authentication and multi-user isolation are not part of this phase. Saved jobs are stored in SQLite and are not synced to an external service.
+- Saved records are linked to jobs and are removed automatically if a job record is deleted.
+- This shortlist is separate from application tracking: bookmarking a role does not mark it as applied or create an application record.
+- After pulling this phase, run `npm run db:generate` and `npm run db:push` from the repository root to apply the SavedJob-to-Job relation in the local SQLite database.
