@@ -269,13 +269,13 @@ app.post("/api/saved-searches", requireAuth, async (req, res) => {
 app.delete("/api/saved-searches/:id", requireAuth, async (req, res) => {
   try {
     const result = await prisma.userSavedSearch.deleteMany({
-      where: { id: req.params.id, userId: res.locals.userId }
+      where: { id: String(req.params.id), userId: res.locals.userId }
     });
     if (!result.count) {
       res.status(404).json({ error: "Saved search not found" });
       return;
     }
-    res.json({ data: { id: req.params.id, deleted: true } });
+    res.json({ data: { id: String(req.params.id), deleted: true } });
   } catch (error) {
     res.status(500).json({ error: "Unable to delete saved search", detail: error instanceof Error ? error.message : "Unknown error" });
   }
@@ -284,7 +284,7 @@ app.delete("/api/saved-searches/:id", requireAuth, async (req, res) => {
 app.get("/api/saved-searches/:id/alerts", requireAuth, async (req, res) => {
   try {
     const search = await prisma.userSavedSearch.findFirst({
-      where: { id: req.params.id, userId: res.locals.userId }
+      where: { id: String(req.params.id), userId: res.locals.userId }
     });
     if (!search) {
       res.status(404).json({ error: "Saved search not found" });
@@ -341,7 +341,7 @@ app.get("/api/saved-jobs", requireAuth, async (_req, res) => {
 
 app.post("/api/jobs/:id/save", requireAuth, async (req, res) => {
   try {
-    const job = await prisma.job.findUnique({ where: { id: req.params.id }, select: { id: true } });
+    const job = await prisma.job.findUnique({ where: { id: String(req.params.id) }, select: { id: true } });
     if (!job) {
       res.status(404).json({ error: "Job listing not found" });
       return;
@@ -359,7 +359,7 @@ app.post("/api/jobs/:id/save", requireAuth, async (req, res) => {
 
 app.delete("/api/jobs/:id/save", requireAuth, async (req, res) => {
   try {
-    const job = await prisma.job.findUnique({ where: { id: req.params.id }, select: { id: true } });
+    const job = await prisma.job.findUnique({ where: { id: String(req.params.id) }, select: { id: true } });
     if (!job) {
       res.status(404).json({ error: "Job listing not found" });
       return;
@@ -371,7 +371,7 @@ app.delete("/api/jobs/:id/save", requireAuth, async (req, res) => {
   }
 });
 
-app.get("/api/jobs", requireAuth, async (req, res) => {
+app.get("/api/jobs", async (req, res) => {
   try {
     const q = String(req.query.q ?? "").trim();
     const location = String(req.query.location ?? "").trim();
@@ -486,7 +486,7 @@ app.get("/api/jobs", requireAuth, async (req, res) => {
 
 app.get("/api/jobs/:id/analyze", requireAuth, async (req, res) => {
   try {
-    const job = await prisma.job.findUnique({ where: { id: req.params.id } });
+    const job = await prisma.job.findUnique({ where: { id: String(req.params.id) } });
     if (!job) {
       res.status(404).json({ error: "Job listing not found" });
       return;
@@ -543,7 +543,7 @@ function serializeApplicationDraft(draft: {
 
 app.get("/api/jobs/:id/application-draft", requireAuth, async (req, res) => {
   try {
-    const job = await prisma.job.findUnique({ where: { id: req.params.id }, select: { id: true } });
+    const job = await prisma.job.findUnique({ where: { id: String(req.params.id) }, select: { id: true } });
     if (!job) {
       res.status(404).json({ error: "Job listing not found" });
       return;
@@ -557,7 +557,7 @@ app.get("/api/jobs/:id/application-draft", requireAuth, async (req, res) => {
 
 app.post("/api/jobs/:id/application-draft", requireAuth, async (req, res) => {
   try {
-    const job = await prisma.job.findUnique({ where: { id: req.params.id } });
+    const job = await prisma.job.findUnique({ where: { id: String(req.params.id) } });
     if (!job) {
       res.status(404).json({ error: "Job listing not found" });
       return;
@@ -614,13 +614,13 @@ app.put("/api/jobs/:id/application-draft", requireAuth, async (req, res) => {
     return;
   }
   try {
-    const existing = await prisma.userApplicationDraft.findFirst({ where: { userId: res.locals.userId, jobId: req.params.id } });
+    const existing = await prisma.userApplicationDraft.findFirst({ where: { userId: res.locals.userId, jobId: String(req.params.id) } });
     if (!existing) {
       res.status(404).json({ error: "Application draft not found. Generate it first." });
       return;
     }
     const saved = await prisma.userApplicationDraft.update({
-      where: { userId_jobId: { userId: res.locals.userId, jobId: req.params.id } },
+      where: { userId_jobId: { userId: res.locals.userId, jobId: String(req.params.id) } },
       data: {
         resumeSummary: body.resumeSummary,
         highlightsJson: JSON.stringify([...new Set(body.highlights.map((item: string) => item.trim()))]),
@@ -637,13 +637,13 @@ app.put("/api/jobs/:id/application-draft", requireAuth, async (req, res) => {
 
 app.post("/api/jobs/:id/application-draft/review", requireAuth, async (req, res) => {
   try {
-    const existing = await prisma.userApplicationDraft.findFirst({ where: { userId: res.locals.userId, jobId: req.params.id } });
+    const existing = await prisma.userApplicationDraft.findFirst({ where: { userId: res.locals.userId, jobId: String(req.params.id) } });
     if (!existing) {
       res.status(404).json({ error: "Application draft not found. Generate it first." });
       return;
     }
     const saved = await prisma.userApplicationDraft.update({
-      where: { userId_jobId: { userId: res.locals.userId, jobId: req.params.id } },
+      where: { userId_jobId: { userId: res.locals.userId, jobId: String(req.params.id) } },
       data: { status: "REVIEWED", reviewedAt: new Date() }
     });
     res.json({ data: serializeApplicationDraft(saved), message: "Marked reviewed for manual use only. No application was submitted." });
@@ -738,7 +738,7 @@ app.get("/api/applications", requireAuth, async (req, res) => {
 
 app.get("/api/jobs/:id/application-tracking", requireAuth, async (req, res) => {
   try {
-    const job = await prisma.job.findUnique({ where: { id: req.params.id }, select: { id: true } });
+    const job = await prisma.job.findUnique({ where: { id: String(req.params.id) }, select: { id: true } });
     if (!job) {
       res.status(404).json({ error: "Job listing not found" });
       return;
@@ -762,7 +762,7 @@ app.put("/api/jobs/:id/application-tracking", requireAuth, async (req, res) => {
     return;
   }
   try {
-    const job = await prisma.job.findUnique({ where: { id: req.params.id }, select: { id: true } });
+    const job = await prisma.job.findUnique({ where: { id: String(req.params.id) }, select: { id: true } });
     if (!job) {
       res.status(404).json({ error: "Job listing not found" });
       return;
@@ -867,7 +867,7 @@ app.post("/api/sources", requireAdmin, async (req, res) => {
 
 app.post("/api/sources/:id/test", requireAdmin, async (req, res) => {
   try {
-    const source = await prisma.jobSource.findUnique({ where: { id: req.params.id } });
+    const source = await prisma.jobSource.findUnique({ where: { id: String(req.params.id) } });
     if (!source) {
       res.status(404).json({ error: "Job source not found" });
       return;
@@ -890,7 +890,7 @@ app.patch("/api/sources/:id", requireAdmin, async (req, res) => {
   }
   try {
     const source = await prisma.jobSource.update({
-      where: { id: req.params.id },
+      where: { id: String(req.params.id) },
       data: { enabled: req.body.enabled }
     });
     res.json({ data: source });
@@ -904,7 +904,7 @@ app.patch("/api/sources/:id", requireAdmin, async (req, res) => {
 
 app.delete("/api/sources/:id", requireAdmin, async (req, res) => {
   try {
-    await prisma.jobSource.delete({ where: { id: req.params.id } });
+    await prisma.jobSource.delete({ where: { id: String(req.params.id) } });
     res.status(204).send();
   } catch (error) {
     res.status(404).json({
@@ -940,7 +940,7 @@ app.get("/api/sync-runs", async (req, res) => {
 
 app.post("/api/sources/:id/sync", requireAdmin, async (req, res) => {
   try {
-    const source = await prisma.jobSource.findUnique({ where: { id: req.params.id } });
+    const source = await prisma.jobSource.findUnique({ where: { id: String(req.params.id) } });
     if (!source) {
       res.status(404).json({ error: "Job source not found" });
       return;
