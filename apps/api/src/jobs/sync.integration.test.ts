@@ -650,4 +650,39 @@ describe("job sync SQLite integration", () => {
     }
   });
 
+
+  it("derives revalidation age without treating old timestamps as proof a job closed", async () => {
+    const now = Date.now();
+    const jobs = [
+      { externalId: "fresh-age", lastVerifiedAt: new Date(now - 2 * 24 * 60 * 60 * 1000) },
+      { externalId: "stale-age", lastVerifiedAt: new Date(now - 10 * 24 * 60 * 60 * 1000) },
+      { externalId: "expired-age", lastVerifiedAt: new Date(now - 45 * 24 * 60 * 60 * 1000) },
+      { externalId: "unverified-age", lastVerifiedAt: null }
+    ];
+    for (const item of jobs) {
+      await prisma.job.create({ data: {
+        source: "GREENHOUSE", externalId: item.externalId, title: "Engineer", company: "Example",
+        description: "Build software", applicationUrl: `https://jobs.example.test/${item.externalId}`,
+        canonicalUrl: `https://jobs.example.test/${item.externalId}`, lastVerifiedAt: item.lastVerifiedAt, status: "ACTIVE"
+      } });
+    }
+    const server = app.listen(0);
+    try {
+      await new Promise<void>(resolve => server.once("listening", resolve));
+      const address = server.address();
+      if (!address || typeof address === "string") throw new Error("Test server did not bind to a TCP port");
+      const response = await fetch(`http://127.0.0.1:${address.port}/api/jobs?listingStatus=ALL`);
+      const body = await response.json() as { data: Array<{ externalId: string; revalidationState: string; status: string }> };
+      expect(response.status).toBe(200);
+      const states = Object.fromEntries(body.data.map(job => [job.externalId, job]));
+      expect(states["fresh-age"].revalidationState).toBe("FRESH");
+      expect(states["stale-age"].revalidationState).toBe("STALE");
+      expect(states["expired-age"].revalidationState).toBe("EXPIRED");
+      expect(states["unverified-age"].revalidationState).toBe("UNVERIFIED");
+      expect(states["expired-age"].status).toBe("ACTIVE");
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+    }
+  });
+
 });
