@@ -54,10 +54,19 @@ function parseProfile(row: { skillsJson: string; preferredRoles: string; locatio
   };
 }
 
-app.get("/api/profile", requireAuth, async (req, res) => {
+const CONTACT_FIELDS = ["fullName", "phone", "city", "state", "pinCode", "linkedinUrl", "githubUrl", "portfolioUrl"] as const;
+type ContactField = typeof CONTACT_FIELDS[number];
+function parseContactFields(row: Partial<Record<ContactField, string>> | null): Record<ContactField, string> {
+  return Object.fromEntries(CONTACT_FIELDS.map(field => [field, row?.[field] ?? ""])) as Record<ContactField, string>;
+}
+
+app.get("/api/profile", requireAuth, async (_req, res) => {
   try {
-    const profile = await prisma.userCandidateProfile.findUnique({ where: { userId: res.locals.userId } });
-    res.json({ data: parseProfile(profile) });
+    const [profile, user] = await Promise.all([
+      prisma.userCandidateProfile.findUnique({ where: { userId: res.locals.userId } }),
+      prisma.user.findUnique({ where: { id: res.locals.userId }, select: { email: true } })
+    ]);
+    res.json({ data: { ...parseProfile(profile), ...parseContactFields(profile), email: user?.email ?? "" } });
   } catch (error) {
     res.status(500).json({ error: "Unable to retrieve candidate profile", detail: error instanceof Error ? error.message : "Unknown error" });
   }
@@ -67,25 +76,30 @@ app.put("/api/profile", requireAuth, async (req, res) => {
   const body = req.body ?? {};
   const validList = (value: unknown): value is string[] =>
     Array.isArray(value) && value.length <= 50 && value.every(item => typeof item === "string" && item.trim().length > 0 && item.length <= 80);
+  const validContact = CONTACT_FIELDS.every(field => body[field] === undefined ||
+    (typeof body[field] === "string" && body[field].trim().length <= (field === "phone" ? 25 : 200)));
   if (!validList(body.skills) || !validList(body.preferredRoles) || !validList(body.locations) ||
-      !REMOTE_PREFERENCES.includes(body.remotePreference)) {
-    res.status(400).json({ error: "skills, preferredRoles and locations must be arrays of up to 50 non-empty strings; remotePreference must be ANY, REMOTE, ONSITE or HYBRID" });
+      !REMOTE_PREFERENCES.includes(body.remotePreference) || !validContact) {
+    res.status(400).json({ error: "Invalid profile. Check your preference lists and contact details." });
     return;
   }
   const clean = (items: string[]) => [...new Set(items.map(item => item.trim()))];
   try {
+    const contact = Object.fromEntries(CONTACT_FIELDS.map(field => [field, typeof body[field] === "string" ? body[field].trim() : ""]])) as Record<ContactField, string>;
     const data = {
       skillsJson: JSON.stringify(clean(body.skills)),
       preferredRoles: JSON.stringify(clean(body.preferredRoles)),
       locations: JSON.stringify(clean(body.locations)),
-      remotePreference: body.remotePreference as CandidatePreferences["remotePreference"]
+      remotePreference: body.remotePreference as CandidatePreferences["remotePreference"],
+      ...contact
     };
     const saved = await prisma.userCandidateProfile.upsert({
       where: { userId: res.locals.userId },
       create: { userId: res.locals.userId, ...data },
       update: data
     });
-    res.json({ data: parseProfile(saved) });
+    const user = await prisma.user.findUnique({ where: { id: res.locals.userId }, select: { email: true } });
+    res.json({ data: { ...parseProfile(saved), ...parseContactFields(saved), email: user?.email ?? "" } });
   } catch (error) {
     res.status(500).json({ error: "Unable to save candidate profile", detail: error instanceof Error ? error.message : "Unknown error" });
   }
