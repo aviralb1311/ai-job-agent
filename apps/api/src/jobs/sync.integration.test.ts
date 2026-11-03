@@ -168,6 +168,31 @@ describe("job sync SQLite integration", () => {
     expect(source.enabled).toBe(true);
   });
 
+  it("marks a missing listing inactive only after a complete non-empty board snapshot", async () => {
+    await prisma.jobSource.create({ data: { provider: "GREENHOUSE", boardId: "acme" } });
+    greenhouseFetch.mockResolvedValueOnce([
+      greenhouseJob,
+      { ...greenhouseJob, id: "greenhouse-102", title: "Frontend Engineer", url: "https://jobs.example.test/frontend" }
+    ]);
+    await syncJobs();
+    greenhouseFetch.mockResolvedValueOnce([greenhouseJob]);
+    const result = await syncJobs();
+    const stored = await prisma.job.findMany({ orderBy: { externalId: "asc" } });
+    expect(result.deactivated).toBe(1);
+    expect(stored.find(job => job.externalId === "greenhouse-101")?.status).toBe("ACTIVE");
+    expect(stored.find(job => job.externalId === "greenhouse-102")?.status).toBe("INACTIVE");
+  });
+
+  it("does not deactivate listings when a board fetch returns an empty snapshot", async () => {
+    await prisma.jobSource.create({ data: { provider: "GREENHOUSE", boardId: "acme" } });
+    await syncJobs();
+    greenhouseFetch.mockResolvedValueOnce([]);
+    const result = await syncJobs();
+    const stored = await prisma.job.findFirst({ where: { externalId: "greenhouse-101" } });
+    expect(result.deactivated).toBe(0);
+    expect(stored?.status).toBe("ACTIVE");
+  });
+
   it("updates an existing provider posting on a subsequent sync", async () => {
     await prisma.jobSource.create({
       data: { provider: "GREENHOUSE", boardId: "acme", displayName: "Acme Inc" }

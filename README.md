@@ -193,3 +193,14 @@ The API exposes a starter catalog of candidate Greenhouse, Lever, and Ashby boar
 Automatic synchronization is **disabled by default**. To enable a periodic full sync, set `SOURCE_SYNC_INTERVAL_MINUTES` in `apps/api/.env` to an integer from 1 to 1440 (24 hours). Set it to `0` to disable it. The first scheduled sync runs after one full interval; manual full sync and per-source sync remain available.
 
 The scheduler runs inside the API process, uses the existing sync service and per-board history, logs its result, and avoids overlapping ticks in that process. It is intended for a **single API instance** in this local MVP. Do not enable this process-local scheduler on multiple replicas because each replica would run its own schedule; production multi-instance scheduling requires a shared distributed lock or external scheduler. The timer is stopped during graceful SIGINT/SIGTERM shutdown.
+
+
+## Listing lifecycle and closed postings (Phase 1.25)
+
+- A successful, non-empty, fully processed board sync marks previously stored postings from that same board as `INACTIVE` when they are absent from the latest feed snapshot.
+- A posting that appears again in a later successful sync is restored to `ACTIVE`.
+- Empty feed responses, failed board fetches, and partial runs do **not** deactivate existing postings. This avoids treating transient provider issues or incomplete processing as proof that a job has closed.
+- The jobs API accepts `listingStatus=OPEN|INACTIVE|ALL`; the dashboard provides matching filters. The default is open listings.
+- Sync history records the number of listings marked inactive in each run. Historical jobs and their application drafts, saved entries, and tracking records are retained.
+- This is feed-based lifecycle inference, not authoritative confirmation from an employer. Always verify the original company listing before applying.
+- After pulling this phase, run `npm run db:generate` and `npm run db:push` from the repository root to add the deactivation count to sync history.

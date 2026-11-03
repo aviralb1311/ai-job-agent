@@ -37,6 +37,7 @@ export interface JobSyncSummary {
   inserted: number;
   updated: number;
   duplicatesSkipped: number;
+  deactivated: number;
   errors: string[];
 }
 
@@ -49,6 +50,7 @@ async function runSync(target?: { provider: string; boardId: string }): Promise<
     inserted: 0,
     updated: 0,
     duplicatesSkipped: 0,
+    deactivated: 0,
     errors: []
   };
 
@@ -72,6 +74,8 @@ async function runSync(target?: { provider: string; boardId: string }): Promise<
     let inserted = 0;
     let updated = 0;
     let duplicatesSkipped = 0;
+    let deactivated = 0;
+    const seenExternalIds = new Set<string>();
     let sourceFetchFailed = false;
     const sourceErrors: string[] = [];
     const connector = getConnector(source.provider);
@@ -91,6 +95,7 @@ async function runSync(target?: { provider: string; boardId: string }): Promise<
               ...raw,
               company: source.displayName?.trim() || raw.company
             });
+            seenExternalIds.add(normalized.externalId);
             const canonicalUrl = canonicalizeUrl(normalized.applicationUrl);
             const where = {
               source_externalId: {
@@ -146,6 +151,21 @@ async function runSync(target?: { provider: string; boardId: string }): Promise<
     }
 
     const status = sourceFetchFailed ? "FAILED" : sourceErrors.length ? "PARTIAL" : "SUCCESS";
+    // Only retire missing listings after a non-empty, fully processed board snapshot.
+    // Empty feeds and partial/failed runs are not strong enough evidence to deactivate jobs.
+    if (status === "SUCCESS" && fetched > 0 && connector && seenExternalIds.size > 0) {
+      const result = await prisma.job.updateMany({
+        where: {
+          source: connector.provider,
+          sourceBoardId: source.boardId,
+          status: { not: "INACTIVE" },
+          externalId: { notIn: [...seenExternalIds] }
+        },
+        data: { status: "INACTIVE" }
+      });
+      deactivated = result.count;
+      summary.deactivated += deactivated;
+    }
     await prisma.syncRun.create({
       data: {
         provider: source.provider,
@@ -155,6 +175,7 @@ async function runSync(target?: { provider: string; boardId: string }): Promise<
         inserted,
         updated,
         duplicatesSkipped,
+        deactivated,
         errorsJson: JSON.stringify(sourceErrors),
         durationMs: Date.now() - startedMs,
         startedAt,

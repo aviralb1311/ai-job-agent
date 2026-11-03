@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { jobSourceFindMany, jobFindUnique, jobFindFirst, jobUpsert, syncRunCreate, greenhouseFetch, leverFetch, ashbyFetch } = vi.hoisted(() => ({
+const { jobSourceFindMany, jobFindUnique, jobFindFirst, jobUpsert, jobUpdateMany, syncRunCreate, greenhouseFetch, leverFetch, ashbyFetch } = vi.hoisted(() => ({
   jobSourceFindMany: vi.fn(),
   jobFindUnique: vi.fn(),
   jobFindFirst: vi.fn(),
   jobUpsert: vi.fn(),
+  jobUpdateMany: vi.fn(),
   syncRunCreate: vi.fn(),
   greenhouseFetch: vi.fn(),
   leverFetch: vi.fn(),
@@ -14,7 +15,7 @@ const { jobSourceFindMany, jobFindUnique, jobFindFirst, jobUpsert, syncRunCreate
 vi.mock("../db.js", () => ({
   prisma: {
     jobSource: { findMany: jobSourceFindMany },
-    job: { findUnique: jobFindUnique, findFirst: jobFindFirst, upsert: jobUpsert },
+    job: { findUnique: jobFindUnique, findFirst: jobFindFirst, upsert: jobUpsert, updateMany: jobUpdateMany },
     syncRun: { create: syncRunCreate }
   }
 }));
@@ -55,6 +56,7 @@ describe("database-managed job sources and sync persistence", () => {
     jobFindUnique.mockResolvedValue(null);
     jobFindFirst.mockResolvedValue(null);
     jobUpsert.mockResolvedValue({ id: "db-1" });
+    jobUpdateMany.mockResolvedValue({ count: 0 });
     syncRunCreate.mockResolvedValue({ id: "sync-run-1" });
   });
 
