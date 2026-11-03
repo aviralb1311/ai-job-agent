@@ -76,3 +76,6 @@
 
 /* Phase 1.22: sync history and diagnostics */
 .sync-history{background:#fff;border:1px solid #e5eaf2;border-radius:18px;padding:23px;margin:0 0 28px}.sync-history-list{display:grid;gap:10px}.sync-history-item{border:1px solid #e7ebf3;border-radius:12px;padding:13px 15px}.sync-history-heading{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.sync-history-heading strong{font-size:13px;color:#263750}.sync-history-heading small,.sync-history-date{font-size:10px;color:#788398}.sync-run-status{font-size:10px;font-weight:800;border-radius:20px;padding:4px 8px;background:#edf8f2;color:#24734d}.sync-run-partial{background:#fff6e9;color:#875b1e}.sync-run-failed{background:#fff0f0;color:#a52c2c}.sync-history-stats{display:flex;flex-wrap:wrap;gap:12px;margin:9px 0 5px;font-size:11px;color:#536078}.sync-history-item details{margin-top:8px;font-size:11px;color:#875b1e}.sync-history-item summary{cursor:pointer}.sync-history-item ul{margin-bottom:0;line-height:1.5;overflow-wrap:anywhere}@media(max-width:560px){.sync-history{padding:16px}.sync-history-stats{gap:8px}}
+
+/* Phase 1.23: individual source sync control */
+.source-item .small-action:disabled{opacity:.55;cursor:not-allowed}

@@ -112,6 +112,7 @@ export function App() {
   const [syncSummary, setSyncSummary] = useState<SyncSummary | null>(null);
   const [syncRuns, setSyncRuns] = useState<SyncRun[]>([]);
   const [syncHistoryLoading, setSyncHistoryLoading] = useState(false);
+  const [syncingSourceId, setSyncingSourceId] = useState<string | null>(null);
   const [provider, setProvider] = useState<Provider>("GREENHOUSE");
   const [boardId, setBoardId] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -673,6 +674,24 @@ export function App() {
     }
   }
 
+  async function syncOneSource(item: JobSource) {
+    setSyncingSourceId(item.id);
+    setError("");
+    setSourceMessage("");
+    try {
+      const response = await fetch(`${API}/api/sources/${item.id}/sync`, { method: "POST" });
+      const body = await response.json() as { data?: SyncSummary; error?: string; detail?: string };
+      if (!response.ok || !body.data) throw new Error(body.detail || body.error || "Source sync failed");
+      setSourceMessage(`${item.displayName || item.boardId}: sync completed — ${body.data.fetched} fetched, ${body.data.inserted} new, ${body.data.updated} updated, ${body.data.errors.length} errors.`);
+      await Promise.all([loadJobs(), loadSources(), loadSyncHistory()]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Source sync failed");
+      await Promise.all([loadSources(), loadSyncHistory()]);
+    } finally {
+      setSyncingSourceId(null);
+    }
+  }
+
   async function toggleSource(item: JobSource) {
     setError("");
     try {
@@ -852,6 +871,7 @@ export function App() {
               {item.health?.lastVerifiedAt ? ` · ${new Date(item.health.lastVerifiedAt).toLocaleDateString()}` : ""}
             </small>
           </div>
+          <button className="small-action secondary" disabled={!item.enabled || syncingSourceId !== null} onClick={() => void syncOneSource(item)}>{syncingSourceId === item.id ? "Syncing…" : "Sync now"}</button>
           <button className="small-action secondary" onClick={() => void toggleSource(item)}>{item.enabled ? "Disable" : "Enable"}</button>
           <button className="small-action danger-action" onClick={() => void removeSource(item)}>Remove</button>
         </article>)}

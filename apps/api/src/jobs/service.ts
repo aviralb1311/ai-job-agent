@@ -41,8 +41,9 @@ export interface JobSyncSummary {
 }
 
 let activeSync: Promise<JobSyncSummary> | null = null;
+let activeSyncKind: "FULL" | "SOURCE" | null = null;
 
-async function runSync(): Promise<JobSyncSummary> {
+async function runSync(target?: { provider: string; boardId: string }): Promise<JobSyncSummary> {
   const summary: JobSyncSummary = {
     fetched: 0,
     inserted: 0,
@@ -54,7 +55,9 @@ async function runSync(): Promise<JobSyncSummary> {
   // Prefer database-managed sources. Environment variables remain supported
   // as a backwards-compatible fallback for existing local installations.
   const savedSources = await prisma.jobSource.findMany({ orderBy: { createdAt: "asc" } });
-  const sources = savedSources.length > 0
+  const sources = target
+    ? savedSources.filter(source => source.provider === target.provider && source.boardId === target.boardId && source.enabled)
+    : savedSources.length > 0
     ? savedSources.filter(source => source.enabled)
     : [
         ...list(config.GREENHOUSE_BOARDS).map(boardId => ({ provider: "GREENHOUSE", boardId, displayName: null })),
@@ -163,11 +166,25 @@ async function runSync(): Promise<JobSyncSummary> {
   return summary;
 }
 
-/** Coalesces overlapping sync requests in this API process. */
+/** Syncs one enabled, configured board and records its normal per-board history. */
+export async function syncSource(provider: string, boardId: string): Promise<JobSyncSummary> {
+  if (activeSync) await activeSync;
+  activeSyncKind = "SOURCE";
+  activeSync = runSync({ provider, boardId }).finally(() => {
+    activeSync = null;
+    activeSyncKind = null;
+  });
+  return activeSync;
+}
+
+/** Serializes source/full syncs and coalesces overlapping full-sync requests. */
 export function syncJobs(): Promise<JobSyncSummary> {
-  if (activeSync) return activeSync;
+  if (activeSync && activeSyncKind === "FULL") return activeSync;
+  if (activeSync) return activeSync.then(() => syncJobs());
+  activeSyncKind = "FULL";
   activeSync = runSync().finally(() => {
     activeSync = null;
+    activeSyncKind = null;
   });
   return activeSync;
 }
