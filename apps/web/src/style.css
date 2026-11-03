@@ -105,3 +105,14 @@
   .follow-up-item { flex-direction: column; }
   .follow-up-item-meta { justify-content: flex-start; text-align: left; }
 }
+
+
+/* Account access */
+.account-controls{display:flex;align-items:center;gap:.7rem;margin-left:auto;font-size:.88rem;color:var(--muted,#64748b)}
+.auth-panel{margin:1.25rem 0;padding:1.35rem;border:1px solid var(--border,#dfe3e8);border-radius:16px;background:var(--surface,#fff)}
+.auth-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.85rem;align-items:end}
+.auth-form label{display:grid;gap:.4rem;font-weight:650;font-size:.9rem}
+.auth-form input{width:100%;min-width:0}
+.auth-form button{min-height:42px}
+.auth-panel .resume-message{margin:.8rem 0 0}
+@media(max-width:640px){.account-controls{width:100%;margin:0;justify-content:space-between}.auth-form{grid-template-columns:1fr}}
