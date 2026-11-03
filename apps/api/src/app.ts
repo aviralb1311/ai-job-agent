@@ -845,6 +845,30 @@ app.delete("/api/sources/:id", async (req, res) => {
   }
 });
 
+app.get("/api/sync-runs", async (req, res) => {
+  const parsedLimit = Number(req.query.limit ?? 20);
+  const limit = Number.isInteger(parsedLimit) ? Math.min(100, Math.max(1, parsedLimit)) : 20;
+  const provider = typeof req.query.provider === "string" ? req.query.provider.trim().toUpperCase() : "";
+  const boardId = typeof req.query.boardId === "string" ? req.query.boardId.trim() : "";
+  if (provider && !SUPPORTED_PROVIDERS.includes(provider as typeof SUPPORTED_PROVIDERS[number])) {
+    res.status(400).json({ error: "provider must be GREENHOUSE, LEVER or ASHBY" });
+    return;
+  }
+  try {
+    const data = await prisma.syncRun.findMany({
+      where: { ...(provider ? { provider } : {}), ...(boardId ? { boardId } : {}) },
+      orderBy: { startedAt: "desc" },
+      take: limit
+    });
+    res.json({ data: data.map(run => ({
+      ...run,
+      errors: (() => { try { const parsed: unknown = JSON.parse(run.errorsJson); return Array.isArray(parsed) ? parsed : []; } catch { return []; } })()
+    })) });
+  } catch (error) {
+    res.status(500).json({ error: "Unable to retrieve sync history", detail: error instanceof Error ? error.message : "Unknown database error" });
+  }
+});
+
 app.post("/api/jobs/sync", async (_req, res) => {
   try {
     const result = await syncJobs();
