@@ -230,10 +230,10 @@ function jobMatchesSavedSearch(job: {
     matchesRequiredSkills(jobSkills, filters.skills);
 }
 
-app.get("/api/saved-searches", async (_req, res) => {
+app.get("/api/saved-searches", requireAuth, async (_req, res) => {
   try {
-    const searches = await prisma.savedSearch.findMany({
-      where: { userId: LOCAL_SAVED_JOBS_USER_ID },
+    const searches = await prisma.userSavedSearch.findMany({
+      where: { userId: res.locals.userId },
       orderBy: { createdAt: "desc" }
     });
     const data = searches.map(search => {
@@ -247,7 +247,7 @@ app.get("/api/saved-searches", async (_req, res) => {
   }
 });
 
-app.post("/api/saved-searches", async (req, res) => {
+app.post("/api/saved-searches", requireAuth, async (req, res) => {
   const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
   const filters = parseSavedSearchFilters(req.body?.filters);
   if (!name || name.length > 80 || !filters) {
@@ -255,8 +255,8 @@ app.post("/api/saved-searches", async (req, res) => {
     return;
   }
   try {
-    const saved = await prisma.savedSearch.create({
-      data: { userId: LOCAL_SAVED_JOBS_USER_ID, name, filtersJson: JSON.stringify(filters) }
+    const saved = await prisma.userSavedSearch.create({
+      data: { userId: res.locals.userId, name, filtersJson: JSON.stringify(filters) }
     });
     res.status(201).json({ data: {
       id: saved.id, name: saved.name, filters, createdAt: saved.createdAt, lastCheckedAt: saved.lastCheckedAt
@@ -266,10 +266,10 @@ app.post("/api/saved-searches", async (req, res) => {
   }
 });
 
-app.delete("/api/saved-searches/:id", async (req, res) => {
+app.delete("/api/saved-searches/:id", requireAuth, async (req, res) => {
   try {
-    const result = await prisma.savedSearch.deleteMany({
-      where: { id: req.params.id, userId: LOCAL_SAVED_JOBS_USER_ID }
+    const result = await prisma.userSavedSearch.deleteMany({
+      where: { id: req.params.id, userId: res.locals.userId }
     });
     if (!result.count) {
       res.status(404).json({ error: "Saved search not found" });
@@ -281,10 +281,10 @@ app.delete("/api/saved-searches/:id", async (req, res) => {
   }
 });
 
-app.get("/api/saved-searches/:id/alerts", async (req, res) => {
+app.get("/api/saved-searches/:id/alerts", requireAuth, async (req, res) => {
   try {
-    const search = await prisma.savedSearch.findFirst({
-      where: { id: req.params.id, userId: LOCAL_SAVED_JOBS_USER_ID }
+    const search = await prisma.userSavedSearch.findFirst({
+      where: { id: req.params.id, userId: res.locals.userId }
     });
     if (!search) {
       res.status(404).json({ error: "Saved search not found" });
@@ -304,7 +304,7 @@ app.get("/api/saved-searches/:id/alerts", async (req, res) => {
       applicationUrl: job.applicationUrl, discoveredAt: job.discoveredAt
     }));
     const checkedAt = new Date();
-    await prisma.savedSearch.update({ where: { id: search.id }, data: { lastCheckedAt: checkedAt } });
+    await prisma.userSavedSearch.updateMany({ where: { id: search.id, userId: res.locals.userId }, data: { lastCheckedAt: checkedAt } });
     res.json({ data, count: data.length, checkedAt, search: { id: search.id, name: search.name } });
   } catch (error) {
     res.status(500).json({ error: "Unable to check saved-search alerts", detail: error instanceof Error ? error.message : "Unknown error" });
@@ -312,16 +312,14 @@ app.get("/api/saved-searches/:id/alerts", async (req, res) => {
 });
 
 
-const LOCAL_SAVED_JOBS_USER_ID = "local";
-
-app.get("/api/saved-jobs", async (_req, res) => {
+app.get("/api/saved-jobs", requireAuth, async (_req, res) => {
   try {
-    const records = await prisma.savedJob.findMany({
-      where: { userId: LOCAL_SAVED_JOBS_USER_ID },
+    const records = await prisma.userSavedJob.findMany({
+      where: { userId: res.locals.userId },
       orderBy: { createdAt: "desc" },
       include: { job: true }
     });
-    const profileRow = await prisma.candidateProfile.findUnique({ where: { id: "default" } });
+    const profileRow = await prisma.userCandidateProfile.findUnique({ where: { userId: res.locals.userId } });
     const profile = parseProfile(profileRow);
     const data = records.map(record => {
       const job = record.job;
@@ -341,16 +339,16 @@ app.get("/api/saved-jobs", async (_req, res) => {
   }
 });
 
-app.post("/api/jobs/:id/save", async (req, res) => {
+app.post("/api/jobs/:id/save", requireAuth, async (req, res) => {
   try {
     const job = await prisma.job.findUnique({ where: { id: req.params.id }, select: { id: true } });
     if (!job) {
       res.status(404).json({ error: "Job listing not found" });
       return;
     }
-    const saved = await prisma.savedJob.upsert({
-      where: { userId_jobId: { userId: LOCAL_SAVED_JOBS_USER_ID, jobId: job.id } },
-      create: { userId: LOCAL_SAVED_JOBS_USER_ID, jobId: job.id },
+    const saved = await prisma.userSavedJob.upsert({
+      where: { userId_jobId: { userId: res.locals.userId, jobId: job.id } },
+      create: { userId: res.locals.userId, jobId: job.id },
       update: {}
     });
     res.status(201).json({ data: { jobId: saved.jobId, savedAt: saved.createdAt, isSaved: true } });
@@ -359,21 +357,21 @@ app.post("/api/jobs/:id/save", async (req, res) => {
   }
 });
 
-app.delete("/api/jobs/:id/save", async (req, res) => {
+app.delete("/api/jobs/:id/save", requireAuth, async (req, res) => {
   try {
     const job = await prisma.job.findUnique({ where: { id: req.params.id }, select: { id: true } });
     if (!job) {
       res.status(404).json({ error: "Job listing not found" });
       return;
     }
-    await prisma.savedJob.deleteMany({ where: { userId: LOCAL_SAVED_JOBS_USER_ID, jobId: job.id } });
+    await prisma.userSavedJob.deleteMany({ where: { userId: res.locals.userId, jobId: job.id } });
     res.json({ data: { jobId: job.id, isSaved: false } });
   } catch (error) {
     res.status(500).json({ error: "Unable to remove saved job", detail: error instanceof Error ? error.message : "Unknown error" });
   }
 });
 
-app.get("/api/jobs", async (req, res) => {
+app.get("/api/jobs", requireAuth, async (req, res) => {
   try {
     const q = String(req.query.q ?? "").trim();
     const location = String(req.query.location ?? "").trim();
@@ -425,11 +423,11 @@ app.get("/api/jobs", async (req, res) => {
 
     const [jobs, savedRecords, profileRow] = await Promise.all([
       prisma.job.findMany({ where, orderBy: [{ publishedAt: "desc" }, { discoveredAt: "desc" }] }),
-      prisma.savedJob.findMany({
-        where: { userId: LOCAL_SAVED_JOBS_USER_ID },
+      prisma.userSavedJob.findMany({
+        where: { userId: res.locals.userId },
         select: { jobId: true }
       }),
-      prisma.candidateProfile.findUnique({ where: { id: "default" } })
+      prisma.userCandidateProfile.findUnique({ where: { userId: res.locals.userId } })
     ]);
     const savedJobIds = new Set(savedRecords.map(record => record.jobId));
     const profile = parseProfile(profileRow);
