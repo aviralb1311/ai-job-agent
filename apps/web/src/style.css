@@ -69,3 +69,6 @@
 .job-description-note{margin:0;padding:10px 14px;border-top:1px solid #e8edf4;color:#7a8496;font-size:10px;line-height:1.5}
 @media(max-width:800px){.job-detail-facts{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:480px){.job-detail-facts{grid-template-columns:1fr}.job-description-content{padding:12px;max-height:420px}}
+
+/* Phase 1.21: stored listing freshness indicators */
+.source-item{grid-template-columns:minmax(150px,1fr) auto minmax(180px,1.2fr) auto auto}.source-health{display:grid;gap:3px;font-size:10px;color:#536078}.source-health strong{font-size:11px;color:#263750}.source-health span,.source-health small{color:#748096}.source-health .freshness-stale{color:#a34b31;font-weight:800}.source-health .freshness-recently_verified{color:#24734d;font-weight:800}.source-health .freshness-not_verified,.source-health .freshness-no_listings{color:#8a672c;font-weight:800}@media(max-width:850px){.source-item{grid-template-columns:minmax(0,1fr) auto auto}.source-health{grid-column:1/-1;grid-row:2}.source-item .enabled-label,.source-item .disabled-label{display:none}}@media(max-width:560px){.source-item{grid-template-columns:minmax(0,1fr) auto}.source-health{grid-column:1/-1;grid-row:auto}}

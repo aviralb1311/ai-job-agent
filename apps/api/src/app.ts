@@ -725,7 +725,34 @@ app.get("/api/sources/catalog", (_req, res) => {
 app.get("/api/sources", async (_req, res) => {
   try {
     const sources = await prisma.jobSource.findMany({ orderBy: { createdAt: "desc" } });
-    res.json({ data: sources });
+    const jobs = await prisma.job.findMany({
+      select: { source: true, sourceBoardId: true, lastVerifiedAt: true, description: true }
+    });
+    const now = Date.now();
+    const data = sources.map(source => {
+      const sourceJobs = jobs.filter(job => job.source === source.provider && job.sourceBoardId === source.boardId);
+      const verifiedDates = sourceJobs
+        .map(job => job.lastVerifiedAt)
+        .filter((date): date is Date => date !== null);
+      const lastVerifiedAt = verifiedDates.length
+        ? new Date(Math.max(...verifiedDates.map(date => date.getTime())))
+        : null;
+      const freshness = sourceJobs.length === 0 ? "NO_LISTINGS"
+        : !lastVerifiedAt ? "NOT_VERIFIED"
+        : now - lastVerifiedAt.getTime() > 7 * 24 * 60 * 60 * 1000 ? "STALE"
+        : "RECENTLY_VERIFIED";
+      return {
+        ...source,
+        health: {
+          listingCount: sourceJobs.length,
+          verifiedListingCount: verifiedDates.length,
+          missingDescriptionCount: sourceJobs.filter(job => !job.description.trim()).length,
+          lastVerifiedAt,
+          freshness
+        }
+      };
+    });
+    res.json({ data });
   } catch (error) {
     res.status(500).json({
       error: "Unable to retrieve job sources",
