@@ -16,6 +16,7 @@ type Job = {
   category?: string;
   skills?: string[];
   match?: { score: number | null; matchedSkills: string[]; missingSkills: string[]; reasons: string[] };
+  workMode?: "REMOTE" | "HYBRID" | "ONSITE" | "UNKNOWN";
 };
 type SyncSummary = {
   fetched: number;
@@ -68,6 +69,11 @@ export function App() {
   const [query, setQuery] = useState("");
   const [location, setLocation] = useState("");
   const [source, setSource] = useState("");
+  const [employmentType, setEmploymentType] = useState("");
+  const [workMode, setWorkMode] = useState("ANY");
+  const [companyFilter, setCompanyFilter] = useState("");
+  const [requiredSkills, setRequiredSkills] = useState("");
+  const [sort, setSort] = useState("NEWEST");
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [sourcesLoading, setSourcesLoading] = useState(false);
@@ -104,7 +110,7 @@ export function App() {
   const [savedJobsBusy, setSavedJobsBusy] = useState(false);
   const [savingJobId, setSavingJobId] = useState<string | null>(null);
 
-  const loadJobs = useCallback(async (filters = { query, location, source }) => {
+  const loadJobs = useCallback(async (filters = { query, location, source, employmentType, workMode, companyFilter, requiredSkills, sort }) => {
     setLoading(true);
     setError("");
     try {
@@ -112,6 +118,11 @@ export function App() {
       if (filters.query.trim()) params.set("q", filters.query.trim());
       if (filters.location.trim()) params.set("location", filters.location.trim());
       if (filters.source) params.set("source", filters.source);
+      if (filters.employmentType) params.set("employmentType", filters.employmentType);
+      if (filters.workMode !== "ANY") params.set("workMode", filters.workMode);
+      if (filters.companyFilter.trim()) params.set("company", filters.companyFilter.trim());
+      if (filters.requiredSkills.trim()) params.set("skills", filters.requiredSkills.trim());
+      params.set("sort", filters.sort);
       params.set("limit", "100");
       const response = await fetch(`${API}/api/jobs?${params.toString()}`);
       if (!response.ok) throw new Error("Could not load jobs. Check that the API and database are running.");
@@ -124,7 +135,7 @@ export function App() {
     } finally {
       setLoading(false);
     }
-  }, [query, location, source]);
+  }, [query, location, source, employmentType, workMode, companyFilter, requiredSkills, sort]);
 
 
 
@@ -728,20 +739,41 @@ export function App() {
     </section>
 
     <section className="toolbar">
-      <div><h3>Job opportunities</h3><p>Browse and filter normalized public job listings.</p></div>
+      <div><h3>Job opportunities</h3><p>Browse, filter and rank normalized public job listings.</p></div>
       <div className="toolbar-actions">
         <button className="secondary" type="button" disabled={savedJobsBusy || loading} onClick={() => void loadSavedJobs()}>{savedJobsBusy ? "Loading saved…" : "★ Saved jobs"}</button>
         {showSavedOnly && <button className="secondary" type="button" onClick={() => void loadJobs()}>All jobs</button>}
-        <select value={source} onChange={e => setSource(e.target.value)} aria-label="Filter by source">
-          <option value="">All sources</option>
-          <option value="GREENHOUSE">Greenhouse</option>
-          <option value="LEVER">Lever</option>
-          <option value="ASHBY">Ashby</option>
-        </select>
         <button className="secondary" disabled={loading || syncing} onClick={() => void loadJobs()}>Refresh</button>
         <button disabled={syncing} onClick={() => void sync()}>{syncing ? "Syncing sources…" : "↻ Sync job sources"}</button>
       </div>
     </section>
+    {!showSavedOnly && <section className="advanced-filters" aria-label="Advanced job filters">
+      <label>Company
+        <input value={companyFilter} onChange={event => setCompanyFilter(event.target.value)} placeholder="Company name" />
+      </label>
+      <label>Employment type
+        <select value={employmentType} onChange={event => setEmploymentType(event.target.value)}>
+          <option value="">All job types</option><option value="FULL_TIME">Full-time</option><option value="PART_TIME">Part-time</option><option value="INTERNSHIP">Internship</option><option value="CONTRACT">Contract</option><option value="UNKNOWN">Unspecified</option>
+        </select>
+      </label>
+      <label>Work mode
+        <select value={workMode} onChange={event => setWorkMode(event.target.value)}>
+          <option value="ANY">Any work mode</option><option value="REMOTE">Remote</option><option value="HYBRID">Hybrid</option><option value="ONSITE">On-site</option><option value="UNKNOWN">Not specified</option>
+        </select>
+      </label>
+      <label>Required skills (comma-separated)
+        <input value={requiredSkills} onChange={event => setRequiredSkills(event.target.value)} placeholder="Node.js, PostgreSQL" />
+      </label>
+      <label>Sort by
+        <select value={sort} onChange={event => setSort(event.target.value)}>
+          <option value="NEWEST">Newest first</option><option value="MATCH">Best profile match</option><option value="RELEVANCE">Best overall fit</option>
+        </select>
+      </label>
+      <button type="button" disabled={loading} onClick={() => void loadJobs()}>Apply filters</button>
+      <button type="button" className="secondary" disabled={loading} onClick={() => {
+        setEmploymentType(""); setWorkMode("ANY"); setCompanyFilter(""); setRequiredSkills(""); setSort("NEWEST"); setSource(""); void loadJobs({ query, location, source: "", employmentType: "", workMode: "ANY", companyFilter: "", requiredSkills: "", sort: "NEWEST" });
+      }}>Clear filters</button>
+    </section>}
 
     {syncSummary && <section className="sync-result" aria-live="polite">
       <div><strong>Sync completed</strong><span> {syncSummary.fetched} fetched</span></div>
@@ -771,7 +803,7 @@ export function App() {
         <div className="job-top"><span className={`source source-${job.source.toLowerCase()}`}>{job.source}</span><span className="status">{job.status}</span></div>
         <h3>{job.title}</h3>
         <p className="company">{job.company}</p>
-        <p className="muted">{job.location || "Location not specified"} · {job.publishedAt ? new Date(job.publishedAt).toLocaleDateString() : "Publication date unavailable"}</p>
+        <p className="muted">{job.location || "Location not specified"} · {job.workMode ? job.workMode.replaceAll("_", " ") : "Work mode unknown"} · {job.publishedAt ? new Date(job.publishedAt).toLocaleDateString() : "Publication date unavailable"}</p>
         <div className="job-intelligence">
           <span className="category-chip">{(job.category || "OTHER").replaceAll("_", " ")}</span>
           {job.match?.score !== null && job.match?.score !== undefined && <span className="match-score">{job.match.score}% match</span>}
