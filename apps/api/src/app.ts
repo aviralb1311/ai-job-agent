@@ -484,14 +484,14 @@ app.get("/api/jobs", requireAuth, async (req, res) => {
 });
 
 
-app.get("/api/jobs/:id/analyze", async (req, res) => {
+app.get("/api/jobs/:id/analyze", requireAuth, async (req, res) => {
   try {
     const job = await prisma.job.findUnique({ where: { id: req.params.id } });
     if (!job) {
       res.status(404).json({ error: "Job listing not found" });
       return;
     }
-    const profileRow = await prisma.candidateProfile.findUnique({ where: { id: "default" } });
+    const profileRow = await prisma.userCandidateProfile.findUnique({ where: { userId: res.locals.userId } });
     const profile = parseProfile(profileRow);
     const readSkills = (value: string): string[] => {
       try {
@@ -541,33 +541,33 @@ function serializeApplicationDraft(draft: {
   };
 }
 
-app.get("/api/jobs/:id/application-draft", async (req, res) => {
+app.get("/api/jobs/:id/application-draft", requireAuth, async (req, res) => {
   try {
     const job = await prisma.job.findUnique({ where: { id: req.params.id }, select: { id: true } });
     if (!job) {
       res.status(404).json({ error: "Job listing not found" });
       return;
     }
-    const draft = await prisma.applicationDraft.findUnique({ where: { jobId: job.id } });
+    const draft = await prisma.userApplicationDraft.findFirst({ where: { userId: res.locals.userId, jobId: job.id } });
     res.json({ data: draft ? serializeApplicationDraft(draft) : null });
   } catch (error) {
     res.status(500).json({ error: "Unable to retrieve application draft", detail: error instanceof Error ? error.message : "Unknown error" });
   }
 });
 
-app.post("/api/jobs/:id/application-draft", async (req, res) => {
+app.post("/api/jobs/:id/application-draft", requireAuth, async (req, res) => {
   try {
     const job = await prisma.job.findUnique({ where: { id: req.params.id } });
     if (!job) {
       res.status(404).json({ error: "Job listing not found" });
       return;
     }
-    const existing = await prisma.applicationDraft.findUnique({ where: { jobId: job.id } });
+    const existing = await prisma.userApplicationDraft.findFirst({ where: { userId: res.locals.userId, jobId: job.id } });
     if (existing) {
       res.status(409).json({ error: "An application draft already exists. Load and edit it instead of overwriting your changes.", data: serializeApplicationDraft(existing) });
       return;
     }
-    const profileRow = await prisma.candidateProfile.findUnique({ where: { id: "default" } });
+    const profileRow = await prisma.userCandidateProfile.findUnique({ where: { userId: res.locals.userId } });
     const profile = parseProfile(profileRow);
     const resume = {
       skills: readJsonList(profileRow?.skillsJson ?? "[]"),
@@ -584,8 +584,9 @@ app.post("/api/jobs/:id/application-draft", async (req, res) => {
       profile,
       resume
     });
-    const draft = await prisma.applicationDraft.create({
+    const draft = await prisma.userApplicationDraft.create({
       data: {
+        userId: res.locals.userId,
         jobId: job.id,
         resumeSummary: generated.resumeSummary,
         highlightsJson: JSON.stringify(generated.highlights),
@@ -603,7 +604,7 @@ app.post("/api/jobs/:id/application-draft", async (req, res) => {
   }
 });
 
-app.put("/api/jobs/:id/application-draft", async (req, res) => {
+app.put("/api/jobs/:id/application-draft", requireAuth, async (req, res) => {
   const body = req.body ?? {};
   const validHighlights = Array.isArray(body.highlights) && body.highlights.length <= 10 &&
     body.highlights.every((item: unknown) => typeof item === "string" && item.trim().length > 0 && item.length <= 500);
@@ -613,13 +614,13 @@ app.put("/api/jobs/:id/application-draft", async (req, res) => {
     return;
   }
   try {
-    const existing = await prisma.applicationDraft.findUnique({ where: { jobId: req.params.id } });
+    const existing = await prisma.userApplicationDraft.findFirst({ where: { userId: res.locals.userId, jobId: req.params.id } });
     if (!existing) {
       res.status(404).json({ error: "Application draft not found. Generate it first." });
       return;
     }
-    const saved = await prisma.applicationDraft.update({
-      where: { jobId: req.params.id },
+    const saved = await prisma.userApplicationDraft.update({
+      where: { userId_jobId: { userId: res.locals.userId, jobId: req.params.id } },
       data: {
         resumeSummary: body.resumeSummary,
         highlightsJson: JSON.stringify([...new Set(body.highlights.map((item: string) => item.trim()))]),
@@ -634,15 +635,15 @@ app.put("/api/jobs/:id/application-draft", async (req, res) => {
   }
 });
 
-app.post("/api/jobs/:id/application-draft/review", async (req, res) => {
+app.post("/api/jobs/:id/application-draft/review", requireAuth, async (req, res) => {
   try {
-    const existing = await prisma.applicationDraft.findUnique({ where: { jobId: req.params.id } });
+    const existing = await prisma.userApplicationDraft.findFirst({ where: { userId: res.locals.userId, jobId: req.params.id } });
     if (!existing) {
       res.status(404).json({ error: "Application draft not found. Generate it first." });
       return;
     }
-    const saved = await prisma.applicationDraft.update({
-      where: { jobId: req.params.id },
+    const saved = await prisma.userApplicationDraft.update({
+      where: { userId_jobId: { userId: res.locals.userId, jobId: req.params.id } },
       data: { status: "REVIEWED", reviewedAt: new Date() }
     });
     res.json({ data: serializeApplicationDraft(saved), message: "Marked reviewed for manual use only. No application was submitted." });
@@ -678,7 +679,7 @@ function serializeApplicationTracking(record: {
   };
 }
 
-app.get("/api/applications/follow-ups", async (req, res) => {
+app.get("/api/applications/follow-ups", requireAuth, async (req, res) => {
   const bucketValue = typeof req.query.bucket === "string" ? req.query.bucket.toUpperCase() : "ALL";
   const bucket = FOLLOW_UP_BUCKETS.includes(bucketValue as FollowUpBucket) ? bucketValue as FollowUpBucket : null;
   const today = typeof req.query.today === "string" ? req.query.today : new Date().toISOString().slice(0, 10);
@@ -687,8 +688,9 @@ app.get("/api/applications/follow-ups", async (req, res) => {
     return;
   }
   try {
-    const records = await prisma.applicationTracking.findMany({
+    const records = await prisma.userApplicationTracking.findMany({
       where: {
+        userId: res.locals.userId,
         followUpAt: { not: null },
         status: { notIn: ["REJECTED", "WITHDRAWN"] }
       },
@@ -713,15 +715,15 @@ app.get("/api/applications/follow-ups", async (req, res) => {
   }
 });
 
-app.get("/api/applications", async (req, res) => {
+app.get("/api/applications", requireAuth, async (req, res) => {
   const status = typeof req.query.status === "string" ? req.query.status.toUpperCase() : "";
   if (status && !APPLICATION_STATUSES.includes(status as ApplicationStatus)) {
     res.status(400).json({ error: "Unsupported application status filter." });
     return;
   }
   try {
-    const records = await prisma.applicationTracking.findMany({
-      where: status ? { status } : {},
+    const records = await prisma.userApplicationTracking.findMany({
+      where: { userId: res.locals.userId, ...(status ? { status } : {}) },
       orderBy: [{ followUpAt: "asc" }, { updatedAt: "desc" }],
       include: { job: { select: { id: true, title: true, company: true, location: true, applicationUrl: true } } }
     });
@@ -734,21 +736,21 @@ app.get("/api/applications", async (req, res) => {
   }
 });
 
-app.get("/api/jobs/:id/application-tracking", async (req, res) => {
+app.get("/api/jobs/:id/application-tracking", requireAuth, async (req, res) => {
   try {
     const job = await prisma.job.findUnique({ where: { id: req.params.id }, select: { id: true } });
     if (!job) {
       res.status(404).json({ error: "Job listing not found" });
       return;
     }
-    const record = await prisma.applicationTracking.findUnique({ where: { jobId: job.id } });
+    const record = await prisma.userApplicationTracking.findFirst({ where: { userId: res.locals.userId, jobId: job.id } });
     res.json({ data: record ? serializeApplicationTracking(record) : null });
   } catch (error) {
     res.status(500).json({ error: "Unable to retrieve application tracking details", detail: error instanceof Error ? error.message : "Unknown error" });
   }
 });
 
-app.put("/api/jobs/:id/application-tracking", async (req, res) => {
+app.put("/api/jobs/:id/application-tracking", requireAuth, async (req, res) => {
   const body = req.body ?? {};
   const status = typeof body.status === "string" ? body.status.toUpperCase() : "";
   const appliedAt = parseOptionalDate(body.appliedAt);
@@ -765,9 +767,9 @@ app.put("/api/jobs/:id/application-tracking", async (req, res) => {
       res.status(404).json({ error: "Job listing not found" });
       return;
     }
-    const record = await prisma.applicationTracking.upsert({
-      where: { jobId: job.id },
-      create: { jobId: job.id, status: status as ApplicationStatus, notes: body.notes.trim(), appliedAt, followUpAt },
+    const record = await prisma.userApplicationTracking.upsert({
+      where: { userId_jobId: { userId: res.locals.userId, jobId: job.id } },
+      create: { userId: res.locals.userId, jobId: job.id, status: status as ApplicationStatus, notes: body.notes.trim(), appliedAt, followUpAt },
       update: { status: status as ApplicationStatus, notes: body.notes.trim(), appliedAt, followUpAt }
     });
     res.json({ data: serializeApplicationTracking(record) });
