@@ -1,13 +1,16 @@
 {
   "manifest_version": 3,
   "name": "AI Job Agent - Application Helper",
-  "version": "0.1.1",
-  "description": "Recognises supported Greenhouse application forms.",
-  "permissions": [],
+  "version": "0.2.0",
+  "description": "Connect securely to your AI Job Agent profile and prepare supported application forms.",
+  "permissions": [
+    "storage"
+  ],
   "host_permissions": [
     "https://boards.greenhouse.io/*",
     "https://job-boards.greenhouse.io/*",
-    "https://*.greenhouse.io/*"
+    "https://*.greenhouse.io/*",
+    "http://localhost:4000/*"
   ],
   "action": {
     "default_popup": "popup.html",
