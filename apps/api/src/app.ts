@@ -423,11 +423,15 @@ app.get("/api/jobs", optionalAuth, async (req, res) => {
 
     const [jobs, savedRecords, profileRow] = await Promise.all([
       prisma.job.findMany({ where, orderBy: [{ publishedAt: "desc" }, { discoveredAt: "desc" }] }),
-      prisma.userSavedJob.findMany({
-        where: { userId: res.locals.userId },
-        select: { jobId: true }
-      }),
-      prisma.userCandidateProfile.findUnique({ where: { userId: res.locals.userId } })
+      res.locals.userId
+        ? prisma.userSavedJob.findMany({
+            where: { userId: res.locals.userId },
+            select: { jobId: true }
+          })
+        : Promise.resolve([]),
+      res.locals.userId
+        ? prisma.userCandidateProfile.findUnique({ where: { userId: res.locals.userId } })
+        : Promise.resolve(null)
     ]);
     const savedJobIds = new Set(savedRecords.map(record => record.jobId));
     const profile = parseProfile(profileRow);
