@@ -149,6 +149,7 @@ model SyncRun {
   inserted         Int      @default(0)
   updated          Int      @default(0)
   duplicatesSkipped Int     @default(0)
+  deactivated       Int     @default(0)
   errorsJson       String   @default("[]")
   durationMs       Int      @default(0)
   startedAt        DateTime @default(now())
