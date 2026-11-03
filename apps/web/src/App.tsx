@@ -16,7 +16,6 @@ type Job = {
   status: string;
   isSaved?: boolean;
   savedAt?: string;
-  employmentType?: string;
   category?: string;
   skills?: string[];
   match?: { score: number | null; matchedSkills: string[]; missingSkills: string[]; reasons: string[] };
@@ -71,14 +70,15 @@ const API = "http://localhost:4000";
 
 function formatJobDescription(description: string): string {
   const withBreaks = description
-    .replace(/<\\s*br\\s*\\/?\\s*>/gi, "\\n")
-    .replace(/<\\s*li\\b[^>]*>/gi, "• ")
-    .replace(/<\\s*\\/\\s*(p|div|li|h[1-6]|section|article)\\s*>/gi, "\\n");
+    .replace(/<\s*br\s*\/?\s*>/gi, "\n")
+    .replace(/<\s*li\b[^>]*>/gi, "• ")
+    .replace(/<\/\s*(p|div|li|h[1-6]|section|article)\s*>/gi, "\n");
   const parsed = new DOMParser().parseFromString(withBreaks, "text/html");
+  parsed.querySelectorAll("script, style, template, noscript").forEach(node => node.remove());
   return (parsed.body.textContent ?? "")
-    .replace(/\\u00a0/g, " ")
-    .replace(/[ \\t]+\\n/g, "\\n")
-    .replace(/\\n{3,}/g, "\\n\\n")
+    .replace(/\u00a0/g, " ")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
 
