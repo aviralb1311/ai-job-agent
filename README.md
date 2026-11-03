@@ -152,3 +152,11 @@ The API exposes a starter catalog of candidate Greenhouse, Lever, and Ashby boar
 - Alerts are checked manually inside the app. No email, push notification, background polling, application submission, or employer contact is performed.
 - Saved searches use the same single local profile key (`local`) as the shortlist; authentication and multi-user separation are not included in this MVP.
 - After pulling this phase, run `npm run db:generate` and `npm run db:push` from the repository root to add the `SavedSearch` table to the local SQLite database.
+
+
+## Full job details viewer (Phase 1.20)
+
+- Expand a job card to review the full description returned by the public provider, alongside employment type, inferred work mode, first-discovered date, and last source-verification timestamp.
+- Provider HTML is parsed into plain text in the browser. Script, style, template, and noscript elements are excluded; no provider HTML is injected into the page as markup.
+- Description text preserves line breaks and list markers where the provider supplied standard HTML structure. Plain-text and missing descriptions remain readable, with a reminder to verify the original employer listing.
+- The existing **View original listing** link remains the authoritative place to confirm current requirements and submit an application.
