@@ -8,7 +8,8 @@ const schema = z.object({
   GREENHOUSE_BOARDS: z.string().default(""),
   LEVER_SITES: z.string().default(""),
   ASHBY_BOARDS: z.string().default(""),
-  SOURCE_TIMEOUT_MS: z.coerce.number().default(12000)
+  SOURCE_TIMEOUT_MS: z.coerce.number().default(12000),
+  SOURCE_SYNC_INTERVAL_MINUTES: z.coerce.number().int().min(0).max(1440).default(0)
 });
 
 export const config = schema.parse(process.env);

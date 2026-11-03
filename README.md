@@ -186,3 +186,10 @@ The API exposes a starter catalog of candidate Greenhouse, Lever, and Ashby boar
 - The targeted endpoint is `POST /api/sources/:id/sync`. It returns 404 for an unknown source and 409 when the source is disabled.
 - A targeted sync writes the same per-board sync-history record used by full sync, so its result and errors appear in source diagnostics.
 - Existing full sync remains available and unchanged. Targeted sync does not introduce automatic polling or background retries.
+
+
+## Optional scheduled source sync (Phase 1.24)
+
+Automatic synchronization is **disabled by default**. To enable a periodic full sync, set `SOURCE_SYNC_INTERVAL_MINUTES` in `apps/api/.env` to an integer from 1 to 1440 (24 hours). Set it to `0` to disable it. The first scheduled sync runs after one full interval; manual full sync and per-source sync remain available.
+
+The scheduler runs inside the API process, uses the existing sync service and per-board history, logs its result, and avoids overlapping ticks in that process. It is intended for a **single API instance** in this local MVP. Do not enable this process-local scheduler on multiple replicas because each replica would run its own schedule; production multi-instance scheduling requires a shared distributed lock or external scheduler. The timer is stopped during graceful SIGINT/SIGTERM shutdown.
