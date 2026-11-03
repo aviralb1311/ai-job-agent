@@ -60,7 +60,7 @@ type SourcePreview = {
   error?: string;
   detail?: string;
 };
-type CandidateProfile = { skills: string[]; preferredRoles: string[]; locations: string[]; remotePreference: "ANY" | "REMOTE" | "ONSITE" | "HYBRID" };
+type CandidateProfile = { skills: string[]; preferredRoles: string[]; locations: string[]; remotePreference: "ANY" | "REMOTE" | "ONSITE" | "HYBRID"; fullName: string; phone: string; city: string; state: string; pinCode: string; linkedinUrl: string; githubUrl: string; portfolioUrl: string; email: string };
 type ResumeDraft = { skills: string[]; education: string[]; experience: string[]; projects: string[]; certifications: string[] };
 type ApplicationStatus = "SAVED" | "PREPARING" | "APPLIED" | "INTERVIEW" | "OFFER" | "REJECTED" | "WITHDRAWN";
 type ApplicationTracking = { status: ApplicationStatus; notes: string; appliedAt: string; followUpAt: string };
@@ -74,7 +74,7 @@ type JobFitAnalysis = {
   evidence: Array<{ skill: string; sections: string[]; excerpts: string[] }>;
   strengths: string[]; gaps: string[]; recommendations: string[]; disclaimer: string;
 };
-const EMPTY_PROFILE: CandidateProfile = { skills: [], preferredRoles: [], locations: [], remotePreference: "ANY" };
+const EMPTY_PROFILE: CandidateProfile = { skills: [], preferredRoles: [], locations: [], remotePreference: "ANY", fullName: "", phone: "", city: "", state: "", pinCode: "", linkedinUrl: "", githubUrl: "", portfolioUrl: "", email: "" };
 const API = "http://localhost:4000";
 type AuthUser = { id: string; email: string; role: "USER" | "ADMIN" };
 const apiFetch = (input: RequestInfo | URL, init: RequestInit = {}) =>
@@ -131,6 +131,7 @@ export function App() {
   const [displayName, setDisplayName] = useState("");
   const [preview, setPreview] = useState<SourcePreview | null>(null);
   const [profile, setProfile] = useState<CandidateProfile>(EMPTY_PROFILE);
+  const [contact, setContact] = useState({ fullName: "", phone: "", city: "", state: "", pinCode: "", linkedinUrl: "", githubUrl: "", portfolioUrl: "" });
   const [profileSkills, setProfileSkills] = useState("");
   const [profileRoles, setProfileRoles] = useState("");
   const [profileLocations, setProfileLocations] = useState("");
@@ -362,6 +363,7 @@ export function App() {
       const body = await response.json() as { data?: CandidateProfile; error?: string };
       if (!response.ok || !body.data) throw new Error(body.error || "Could not load candidate profile");
       setProfile(body.data);
+      setContact({ fullName: body.data.fullName, phone: body.data.phone, city: body.data.city, state: body.data.state, pinCode: body.data.pinCode, linkedinUrl: body.data.linkedinUrl, githubUrl: body.data.githubUrl, portfolioUrl: body.data.portfolioUrl });
       setProfileSkills(body.data.skills.join(", "));
       setProfileRoles(body.data.preferredRoles.join(", "));
       setProfileLocations(body.data.locations.join(", "));
@@ -377,7 +379,7 @@ export function App() {
     setProfileMessage("");
     try {
       const split = (value: string) => value.split(",").map(item => item.trim()).filter(Boolean);
-      const payload = { skills: split(profileSkills), preferredRoles: split(profileRoles), locations: split(profileLocations), remotePreference };
+      const payload = { skills: split(profileSkills), preferredRoles: split(profileRoles), locations: split(profileLocations), remotePreference, ...contact };
       const response = await apiFetch(`${API}/api/profile`, {
         method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
       });
@@ -889,6 +891,33 @@ export function App() {
         <span className="profile-status">{profile.skills.length + profile.preferredRoles.length + profile.locations.length ? "Profile configured" : "Not configured"}</span>
       </div>
       <form className="profile-form" onSubmit={saveProfile}>
+        <h4>Contact details for applications (India)</h4>
+        <label>Full name
+          <input autoComplete="name" value={contact.fullName} onChange={e => setContact({ ...contact, fullName: e.target.value })} placeholder="As shown on your resume" />
+        </label>
+        <label>Mobile number
+          <input type="tel" autoComplete="tel" value={contact.phone} onChange={e => setContact({ ...contact, phone: e.target.value })} placeholder="+91 98765 43210" />
+        </label>
+        <label>City
+          <input autoComplete="address-level2" value={contact.city} onChange={e => setContact({ ...contact, city: e.target.value })} placeholder="Kanpur" />
+        </label>
+        <label>State
+          <input autoComplete="address-level1" value={contact.state} onChange={e => setContact({ ...contact, state: e.target.value })} placeholder="Uttar Pradesh" />
+        </label>
+        <label>PIN code
+          <input inputMode="numeric" autoComplete="postal-code" value={contact.pinCode} onChange={e => setContact({ ...contact, pinCode: e.target.value })} placeholder="208001" maxLength={6} />
+        </label>
+        <label>LinkedIn URL
+          <input type="url" value={contact.linkedinUrl} onChange={e => setContact({ ...contact, linkedinUrl: e.target.value })} placeholder="https://www.linkedin.com/in/your-profile" />
+        </label>
+        <label>GitHub URL
+          <input type="url" value={contact.githubUrl} onChange={e => setContact({ ...contact, githubUrl: e.target.value })} placeholder="https://github.com/your-username" />
+        </label>
+        <label>Portfolio URL
+          <input type="url" value={contact.portfolioUrl} onChange={e => setContact({ ...contact, portfolioUrl: e.target.value })} placeholder="https://your-portfolio.example" />
+        </label>
+        <p className="form-hint">Account email: {profile.email || "Not available"}</p>
+        <h4>Job preferences</h4>
         <label>Skills (comma-separated)
           <input value={profileSkills} onChange={e => setProfileSkills(e.target.value)} placeholder="Node.js, PostgreSQL, Docker, React" />
         </label>
