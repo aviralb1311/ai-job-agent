@@ -40,6 +40,7 @@ const leverJob = {
 
 describe("job sync SQLite integration", () => {
   beforeEach(async () => {
+    await prisma.savedSearch.deleteMany();
     await prisma.savedJob.deleteMany();
     await prisma.job.deleteMany();
     await prisma.jobSource.deleteMany();
@@ -410,6 +411,81 @@ describe("job sync SQLite integration", () => {
 
       const invalidResponse = await fetch(base + "/api/jobs?workMode=SPACE");
       expect(invalidResponse.status).toBe(400);
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+    }
+  });
+
+
+  it("saves a search and reports only newly discovered matching jobs once", async () => {
+    const server = app.listen(0);
+    try {
+      await new Promise<void>(resolve => server.once("listening", resolve));
+      const address = server.address();
+      if (!address || typeof address === "string") throw new Error("Test server did not bind to a TCP port");
+      const base = "http://127.0.0.1:" + address.port;
+      const createResponse = await fetch(base + "/api/saved-searches", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Remote backend roles",
+          filters: { query: "backend", location: "India", company: "", source: "GREENHOUSE", employmentType: "FULL_TIME", workMode: "REMOTE", skills: ["Node.js"] }
+        })
+      });
+      const created = await createResponse.json() as { data?: { id: string; name: string }; error?: string };
+      expect(createResponse.status).toBe(201);
+      expect(created.data?.name).toBe("Remote backend roles");
+      const searchId = created.data!.id;
+
+      const matchingJob = await prisma.job.create({
+        data: {
+          source: "GREENHOUSE",
+          externalId: "saved-search-alert-match",
+          title: "Backend Engineer",
+          company: "Example Systems",
+          location: "Remote - India",
+          description: "Backend APIs using Node.js",
+          employmentType: "FULL_TIME",
+          applicationUrl: "https://jobs.example.test/alert-match",
+          canonicalUrl: "https://jobs.example.test/alert-match",
+          skillsJson: JSON.stringify(["Node.js"])
+        }
+      });
+      await prisma.job.create({
+        data: {
+          source: "LEVER",
+          externalId: "saved-search-alert-nonmatch",
+          title: "Backend Engineer",
+          company: "Example Systems",
+          location: "Remote - India",
+          description: "Backend APIs using Node.js",
+          employmentType: "FULL_TIME",
+          applicationUrl: "https://jobs.example.test/alert-nonmatch",
+          canonicalUrl: "https://jobs.example.test/alert-nonmatch",
+          skillsJson: JSON.stringify(["Node.js"])
+        }
+      });
+
+      const alertUrl = base + "/api/saved-searches/" + searchId + "/alerts";
+      const alertResponse = await fetch(alertUrl);
+      const alertBody = await alertResponse.json() as { data: Array<{ id: string }>; count: number };
+      expect(alertResponse.status).toBe(200);
+      expect(alertBody.count).toBe(1);
+      expect(alertBody.data[0].id).toBe(matchingJob.id);
+
+      const repeatedCheck = await fetch(alertUrl);
+      const repeatedBody = await repeatedCheck.json() as { data: unknown[]; count: number };
+      expect(repeatedBody.count).toBe(0);
+
+      const listResponse = await fetch(base + "/api/saved-searches");
+      const listBody = await listResponse.json() as { data: Array<{ id: string; filters: { workMode: string } }> };
+      expect(listBody.data).toHaveLength(1);
+      expect(listBody.data[0]).toMatchObject({ id: searchId, filters: { workMode: "REMOTE" } });
+
+      const deleteResponse = await fetch(base + "/api/saved-searches/" + searchId, { method: "DELETE" });
+      expect(deleteResponse.status).toBe(200);
+      const missingResponse = await fetch(alertUrl);
+      expect(missingResponse.status).toBe(404);
     } finally {
       await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
     }
