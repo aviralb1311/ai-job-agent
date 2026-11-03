@@ -68,6 +68,7 @@ model Job {
   category        String   @default("OTHER")
   skillsJson      String   @default("[]")
   applicationDraft ApplicationDraft?
+  applicationTracking ApplicationTracking?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   @@unique([source, externalId])
@@ -107,4 +108,19 @@ model ApplicationDraft {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   job            Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+}
+
+
+model ApplicationTracking {
+  id          String   @id @default(cuid())
+  jobId       String   @unique
+  status      String   @default("SAVED")
+  notes       String   @default("")
+  appliedAt   DateTime?
+  followUpAt  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  job         Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  @@index([status])
+  @@index([followUpAt])
 }

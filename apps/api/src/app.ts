@@ -379,6 +379,96 @@ app.post("/api/jobs/:id/application-draft/review", async (req, res) => {
   }
 });
 
+
+const APPLICATION_STATUSES = ["SAVED", "PREPARING", "APPLIED", "INTERVIEW", "OFFER", "REJECTED", "WITHDRAWN"] as const;
+type ApplicationStatus = typeof APPLICATION_STATUSES[number];
+
+function parseOptionalDate(value: unknown): Date | null | undefined {
+  if (value === null || value === "") return null;
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined;
+  const date = new Date(value + "T00:00:00.000Z");
+  return Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value ? undefined : date;
+}
+
+function serializeApplicationTracking(record: {
+  id: string; jobId: string; status: string; notes: string; appliedAt: Date | null;
+  followUpAt: Date | null; createdAt: Date; updatedAt: Date;
+}) {
+  return {
+    id: record.id,
+    jobId: record.jobId,
+    status: record.status,
+    notes: record.notes,
+    appliedAt: record.appliedAt?.toISOString().slice(0, 10) ?? null,
+    followUpAt: record.followUpAt?.toISOString().slice(0, 10) ?? null,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt
+  };
+}
+
+app.get("/api/applications", async (req, res) => {
+  const status = typeof req.query.status === "string" ? req.query.status.toUpperCase() : "";
+  if (status && !APPLICATION_STATUSES.includes(status as ApplicationStatus)) {
+    res.status(400).json({ error: "Unsupported application status filter." });
+    return;
+  }
+  try {
+    const records = await prisma.applicationTracking.findMany({
+      where: status ? { status } : {},
+      orderBy: [{ followUpAt: "asc" }, { updatedAt: "desc" }],
+      include: { job: { select: { id: true, title: true, company: true, location: true, applicationUrl: true } } }
+    });
+    res.json({ data: records.map(record => ({
+      ...serializeApplicationTracking(record),
+      job: record.job
+    })), count: records.length });
+  } catch (error) {
+    res.status(500).json({ error: "Unable to retrieve application tracker", detail: error instanceof Error ? error.message : "Unknown error" });
+  }
+});
+
+app.get("/api/jobs/:id/application-tracking", async (req, res) => {
+  try {
+    const job = await prisma.job.findUnique({ where: { id: req.params.id }, select: { id: true } });
+    if (!job) {
+      res.status(404).json({ error: "Job listing not found" });
+      return;
+    }
+    const record = await prisma.applicationTracking.findUnique({ where: { jobId: job.id } });
+    res.json({ data: record ? serializeApplicationTracking(record) : null });
+  } catch (error) {
+    res.status(500).json({ error: "Unable to retrieve application tracking details", detail: error instanceof Error ? error.message : "Unknown error" });
+  }
+});
+
+app.put("/api/jobs/:id/application-tracking", async (req, res) => {
+  const body = req.body ?? {};
+  const status = typeof body.status === "string" ? body.status.toUpperCase() : "";
+  const appliedAt = parseOptionalDate(body.appliedAt);
+  const followUpAt = parseOptionalDate(body.followUpAt);
+  if (!APPLICATION_STATUSES.includes(status as ApplicationStatus) ||
+      typeof body.notes !== "string" || body.notes.length > 5000 ||
+      appliedAt === undefined || followUpAt === undefined) {
+    res.status(400).json({ error: "Provide a supported status, notes up to 5,000 characters, and valid YYYY-MM-DD appliedAt/followUpAt dates or empty values." });
+    return;
+  }
+  try {
+    const job = await prisma.job.findUnique({ where: { id: req.params.id }, select: { id: true } });
+    if (!job) {
+      res.status(404).json({ error: "Job listing not found" });
+      return;
+    }
+    const record = await prisma.applicationTracking.upsert({
+      where: { jobId: job.id },
+      create: { jobId: job.id, status: status as ApplicationStatus, notes: body.notes.trim(), appliedAt, followUpAt },
+      update: { status: status as ApplicationStatus, notes: body.notes.trim(), appliedAt, followUpAt }
+    });
+    res.json({ data: serializeApplicationTracking(record) });
+  } catch (error) {
+    res.status(500).json({ error: "Unable to save application tracking details", detail: error instanceof Error ? error.message : "Unknown error" });
+  }
+});
+
 app.get("/api/sources/catalog", (_req, res) => {
   res.json({ data: sourceCatalog });
 });
