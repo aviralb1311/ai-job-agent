@@ -822,10 +822,10 @@ export function App() {
       </form>
       {profileMessage && <p className="profile-message" role="status">{profileMessage}</p>}
       <p className="form-hint">Scores are deterministic heuristics: skills contribute 70%, role 20%, and location/work mode 10% when those preferences are set. They are guidance, not a hiring prediction.</p>
-    </section>
+    </section>}
 
 
-    <section className="resume-section">
+    {user && <section className="resume-section">
       <div className="section-heading">
         <div><span className="eyebrow-dark">RESUME INTELLIGENCE</span><h3>Extract your verified experience</h3><p>Upload a text-based PDF or DOCX (max 5 MB). Extraction runs locally through this API; your file is not retained or sent to an AI provider.</p></div>
       </div>
@@ -1044,7 +1044,7 @@ export function App() {
         <strong>Recent tracked roles</strong>
         {applicationRecords.slice(0, 5).map(item => <div key={item.jobId}><span>{item.job.title} · {item.job.company}</span><span className="tracker-status">{item.status.replaceAll("_", " ")}</span>{item.followUpAt && <small>Follow up: {new Date(item.followUpAt + "T00:00:00").toLocaleDateString()}</small>}</div>)}
       </div>}
-    </section>
+    </section>}
 
     {user && <FollowUpQueue />}
 
@@ -1081,8 +1081,6 @@ export function App() {
           </button>
           <button className="small-action secondary" type="button" disabled={analysisBusy === job.id} onClick={() => void analyzeFit(job.id)}>
             {analysisBusy === job.id ? "Analyzing…" : analysis?.jobId === job.id ? "Hide fit analysis" : "Analyze resume fit"}
-          </button>
-          </button>}
           <a href={job.applicationUrl} target="_blank" rel="noreferrer">View original listing ↗</a>
         </div>
 
@@ -1107,7 +1105,7 @@ export function App() {
             <div className="tracking-save"><button type="button" disabled={trackingSaving === job.id} onClick={() => void saveTracking(job.id)}>{trackingSaving === job.id ? "Saving…" : "Save progress"}</button></div>
           </div>
           {trackingMessage && <p className="resume-message" role="status">{trackingMessage}</p>}
-        </details>
+        </details>}
         {user && <button className="small-action secondary" type="button" disabled={draftBusy === job.id} onClick={() => void openApplicationDraft(job.id)}>
           {draftBusy === job.id ? "Preparing…" : applicationDraft?.jobId === job.id ? "Hide application draft" : "Prepare application"}
         </button>
