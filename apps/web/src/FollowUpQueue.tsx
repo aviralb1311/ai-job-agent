@@ -38,7 +38,7 @@ export function FollowUpQueue() {
     setError("");
     try {
       const params = new URLSearchParams({ bucket: selected, today: localDateKey() });
-      const response = await fetch(API + "/api/applications/follow-ups?" + params.toString());
+      const response = await fetch(API + "/api/applications/follow-ups?" + params.toString(), { credentials: "include" });
       const body = await response.json();
       if (!response.ok || !Array.isArray(body.data)) throw new Error(body.error || "Could not load follow-ups");
       setItems(body.data);
