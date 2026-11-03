@@ -52,6 +52,7 @@ describe("job sync SQLite integration", () => {
   });
 
   afterAll(async () => {
+    await prisma.savedSearch.deleteMany();
     await prisma.savedJob.deleteMany();
     await prisma.job.deleteMany();
     await prisma.jobSource.deleteMany();
