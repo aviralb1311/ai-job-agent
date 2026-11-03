@@ -436,6 +436,10 @@ describe("job sync SQLite integration", () => {
       expect(createResponse.status).toBe(201);
       expect(created.data?.name).toBe("Remote backend roles");
       const searchId = created.data!.id;
+      await prisma.savedSearch.update({
+        where: { id: searchId },
+        data: { lastCheckedAt: new Date(Date.now() - 10_000) }
+      });
 
       const matchingJob = await prisma.job.create({
         data: {
