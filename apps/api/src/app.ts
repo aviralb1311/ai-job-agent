@@ -173,6 +173,7 @@ type SavedSearchFilters = {
   source: string;
   employmentType: string;
   workMode: string;
+  sort: string;
   skills: string[];
 };
 
@@ -184,11 +185,13 @@ function parseSavedSearchFilters(value: unknown): SavedSearchFilters | null {
   const skills = input.skills ?? [];
   if (!Array.isArray(skills) || skills.length > 20 || skills.some(skill => typeof skill !== "string" || !skill.trim() || skill.length > 80)) return null;
   const workMode = typeof input.workMode === "string" ? input.workMode.toUpperCase() : "ANY";
+  const sort = typeof input.sort === "string" ? input.sort.toUpperCase() : "NEWEST";
   const employmentType = typeof input.employmentType === "string" ? input.employmentType.toUpperCase() : "";
   if (!["ANY", "REMOTE", "HYBRID", "ONSITE", "UNKNOWN"].includes(workMode)) return null;
   if (employmentType && !["FULL_TIME", "PART_TIME", "INTERNSHIP", "CONTRACT", "UNKNOWN"].includes(employmentType)) return null;
   const source = typeof input.source === "string" ? input.source.toUpperCase() : "";
   if (source && !["GREENHOUSE", "LEVER", "ASHBY"].includes(source)) return null;
+  if (!["NEWEST", "MATCH", "RELEVANCE"].includes(sort)) return null;
   return {
     query: typeof input.query === "string" ? input.query.trim() : "",
     location: typeof input.location === "string" ? input.location.trim() : "",
@@ -196,6 +199,7 @@ function parseSavedSearchFilters(value: unknown): SavedSearchFilters | null {
     source,
     employmentType,
     workMode,
+    sort,
     skills: skills.map((skill: string) => skill.trim())
   };
 }
@@ -222,7 +226,7 @@ app.get("/api/saved-searches", async (_req, res) => {
       orderBy: { createdAt: "desc" }
     });
     const data = searches.map(search => {
-      let filters: SavedSearchFilters = { query: "", location: "", company: "", source: "", employmentType: "", workMode: "ANY", skills: [] };
+      let filters: SavedSearchFilters = { query: "", location: "", company: "", source: "", employmentType: "", workMode: "ANY", sort: "NEWEST", skills: [] };
       try { filters = parseSavedSearchFilters(JSON.parse(search.filtersJson)) ?? filters; } catch { /* use empty filter summary */ }
       return { id: search.id, name: search.name, filters, createdAt: search.createdAt, lastCheckedAt: search.lastCheckedAt };
     });
@@ -283,7 +287,6 @@ app.get("/api/saved-searches/:id/alerts", async (req, res) => {
     const matchingJobs = await prisma.job.findMany({
       where: { discoveredAt: { gt: search.lastCheckedAt } },
       orderBy: { discoveredAt: "desc" },
-      take: 500
     });
     const data = matchingJobs.filter(job => jobMatchesSavedSearch(job, filters)).slice(0, 50).map(job => ({
       id: job.id, title: job.title, company: job.company, location: job.location,
