@@ -1,4 +1,5 @@
 import express from "express";
+import { createHash, randomBytes } from "node:crypto";
 import { register, login, logout, currentSession, requireAuth, requireAdmin, optionalAuth } from "./auth.js";
 import cors from "cors";
 import { config } from "./config.js";
@@ -24,6 +25,111 @@ app.post("/api/auth/register", register);
 app.post("/api/auth/login", login);
 app.post("/api/auth/logout", logout);
 app.get("/api/auth/me", currentSession);
+
+function digestExtensionToken(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+async function requireExtensionToken(req: express.Request, res: express.Response, next: express.NextFunction): Promise<void> {
+  const authorization = req.header("authorization") ?? "";
+  const match = /^Bearer ([A-Za-z0-9_-]{40,100})$/.exec(authorization);
+  if (!match) {
+    res.status(401).json({ error: "Extension connection required." });
+    return;
+  }
+  try {
+    const token = await prisma.extensionAccessToken.findUnique({
+      where: { tokenHash: digestExtensionToken(match[1]) }
+    });
+    if (!token || token.expiresAt <= new Date()) {
+      if (token) await prisma.extensionAccessToken.delete({ where: { id: token.id } });
+      res.status(401).json({ error: "Extension connection expired. Pair the extension again." });
+      return;
+    }
+    res.locals.extensionUserId = token.userId;
+    next();
+  } catch {
+    res.status(500).json({ error: "Unable to validate extension connection." });
+  }
+}
+
+// Create a single-use, five-minute pairing code for the signed-in account.
+app.post("/api/extension/pairing-code", requireAuth, async (_req, res) => {
+  try {
+    await prisma.extensionPairingCode.deleteMany({
+      where: { userId: res.locals.userId, OR: [{ expiresAt: { lte: new Date() } }, { consumedAt: { not: null } }] }
+    });
+    const code = randomBytes(6).toString("hex").toUpperCase();
+    await prisma.extensionPairingCode.create({
+      data: {
+        codeHash: digestExtensionToken(code),
+        userId: res.locals.userId,
+        expiresAt: new Date(Date.now() + 5 * 60 * 1000)
+      }
+    });
+    res.json({ data: { code, expiresInSeconds: 300 } });
+  } catch {
+    res.status(500).json({ error: "Unable to create extension pairing code." });
+  }
+});
+
+// Exchange a one-time pairing code for a seven-day extension-only bearer token.
+app.post("/api/extension/exchange", async (req, res) => {
+  const code = typeof req.body?.code === "string" ? req.body.code.trim().toUpperCase() : "";
+  if (!/^[A-F0-9]{12}$/.test(code)) {
+    res.status(400).json({ error: "Enter a valid pairing code." });
+    return;
+  }
+  try {
+    const pairing = await prisma.extensionPairingCode.findUnique({ where: { codeHash: digestExtensionToken(code) } });
+    if (!pairing || pairing.consumedAt || pairing.expiresAt <= new Date()) {
+      res.status(401).json({ error: "Pairing code is invalid or expired. Generate a new code in your account." });
+      return;
+    }
+    const consumed = await prisma.extensionPairingCode.updateMany({
+      where: { id: pairing.id, consumedAt: null, expiresAt: { gt: new Date() } },
+      data: { consumedAt: new Date() }
+    });
+    if (consumed.count !== 1) {
+      res.status(401).json({ error: "Pairing code has already been used. Generate a new code." });
+      return;
+    }
+    const accessToken = randomBytes(32).toString("base64url");
+    await prisma.extensionAccessToken.create({
+      data: {
+        tokenHash: digestExtensionToken(accessToken),
+        userId: pairing.userId,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+      }
+    });
+    res.json({ data: { accessToken, expiresInSeconds: 7 * 24 * 60 * 60 } });
+  } catch {
+    res.status(500).json({ error: "Unable to connect the extension." });
+  }
+});
+
+// Return only contact fields required for form autofill; never expose resume contents.
+app.get("/api/extension/profile", requireExtensionToken, async (_req, res) => {
+  try {
+    const [profile, user] = await Promise.all([
+      prisma.userCandidateProfile.findUnique({ where: { userId: res.locals.extensionUserId } }),
+      prisma.user.findUnique({ where: { id: res.locals.extensionUserId }, select: { email: true } })
+    ]);
+    res.json({ data: {
+      fullName: profile?.fullName ?? "",
+      phone: profile?.phone ?? "",
+      city: profile?.city ?? "",
+      state: profile?.state ?? "",
+      pinCode: profile?.pinCode ?? "",
+      linkedinUrl: profile?.linkedinUrl ?? "",
+      githubUrl: profile?.githubUrl ?? "",
+      portfolioUrl: profile?.portfolioUrl ?? "",
+      email: user?.email ?? ""
+    } });
+  } catch {
+    res.status(500).json({ error: "Unable to retrieve extension profile." });
+  }
+});
 
 app.get("/api/health", async (_req, res) => {
   try {
