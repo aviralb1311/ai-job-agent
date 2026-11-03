@@ -8,7 +8,11 @@ type Job = {
   location: string | null;
   source: string;
   applicationUrl: string;
+  description: string;
   publishedAt: string | null;
+  discoveredAt?: string;
+  lastVerifiedAt?: string;
+  employmentType?: string;
   status: string;
   isSaved?: boolean;
   savedAt?: string;
@@ -63,6 +67,20 @@ type JobFitAnalysis = {
 };
 const EMPTY_PROFILE: CandidateProfile = { skills: [], preferredRoles: [], locations: [], remotePreference: "ANY" };
 const API = "http://localhost:4000";
+
+
+function formatJobDescription(description: string): string {
+  const withBreaks = description
+    .replace(/<\\s*br\\s*\\/?\\s*>/gi, "\\n")
+    .replace(/<\\s*li\\b[^>]*>/gi, "• ")
+    .replace(/<\\s*\\/\\s*(p|div|li|h[1-6]|section|article)\\s*>/gi, "\\n");
+  const parsed = new DOMParser().parseFromString(withBreaks, "text/html");
+  return (parsed.body.textContent ?? "")
+    .replace(/\\u00a0/g, " ")
+    .replace(/[ \\t]+\\n/g, "\\n")
+    .replace(/\\n{3,}/g, "\\n\\n")
+    .trim();
+}
 
 export function App() {
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -935,6 +953,19 @@ export function App() {
         <h3>{job.title}</h3>
         <p className="company">{job.company}</p>
         <p className="muted">{job.location || "Location not specified"} · {job.workMode ? job.workMode.replaceAll("_", " ") : "Work mode unknown"} · {job.publishedAt ? new Date(job.publishedAt).toLocaleDateString() : "Publication date unavailable"}</p>
+        <details className="job-details">
+          <summary>Read full job description & details</summary>
+          <div className="job-detail-facts">
+            <div><span>Employment type</span><strong>{job.employmentType ? job.employmentType.replaceAll("_", " ") : "Not specified"}</strong></div>
+            <div><span>Work mode</span><strong>{job.workMode ? job.workMode.replaceAll("_", " ") : "Unknown"}</strong></div>
+            <div><span>First discovered</span><strong>{job.discoveredAt ? new Date(job.discoveredAt).toLocaleDateString() : "Not available"}</strong></div>
+            <div><span>Last verified from source</span><strong>{job.lastVerifiedAt ? new Date(job.lastVerifiedAt).toLocaleString() : "Not verified yet"}</strong></div>
+          </div>
+          <div className="job-description-content">
+            {formatJobDescription(job.description || "") || "The source did not provide a job description. Open the original employer listing for full details."}
+          </div>
+          <p className="job-description-note">Description text is provided by the public career board. Always confirm current requirements and application details on the employer's original listing.</p>
+        </details>
         <div className="job-intelligence">
           <span className="category-chip">{(job.category || "OTHER").replaceAll("_", " ")}</span>
           {job.match?.score !== null && job.match?.score !== undefined && <span className="match-score">{job.match.score}% match</span>}
