@@ -746,4 +746,103 @@ describe("job sync SQLite integration", () => {
     expect(after?.lastVerifiedAt?.getTime()).toBe(before?.lastVerifiedAt?.getTime());
   });
 
+
+  it("keeps saved jobs, drafts, tracking and candidate profiles isolated between accounts", async () => {
+    const job = await prisma.job.create({
+      data: {
+        source: "GREENHOUSE",
+        externalId: "account-isolation-1",
+        title: "Private workflow test",
+        company: "Example Co",
+        location: "Remote",
+        description: "Build secure APIs",
+        applicationUrl: "https://jobs.example.test/isolation",
+        canonicalUrl: "https://jobs.example.test/isolation"
+      }
+    });
+    await prisma.userCandidateProfile.create({
+      data: {
+        userId: testUserId,
+        skillsJson: JSON.stringify(["PrivateSkill"]),
+        experienceJson: JSON.stringify(["Confidential experience"])
+      }
+    });
+    await prisma.userSavedJob.create({ data: { userId: testUserId, jobId: job.id } });
+    await prisma.userApplicationDraft.create({
+      data: {
+        userId: testUserId, jobId: job.id,
+        resumeSummary: "First account private summary",
+        coverLetter: "First account private cover letter"
+      }
+    });
+    await prisma.userApplicationTracking.create({
+      data: { userId: testUserId, jobId: job.id, status: "APPLIED", notes: "Private application notes" }
+    });
+
+    const secondUser = await prisma.user.create({
+      data: { email: `second-${Date.now()}-${Math.random()}@example.test` }
+    });
+    const secondToken = randomBytes(32).toString("base64url");
+    await prisma.session.create({
+      data: {
+        userId: secondUser.id,
+        tokenHash: createHash("sha256").update(secondToken).digest("hex"),
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000)
+      }
+    });
+    const secondCookie = `ai_job_session=${secondToken}`;
+    const secondFetch = (url: string, init: RequestInit = {}) => {
+      const headers = new Headers(init.headers);
+      headers.set("Cookie", secondCookie);
+      return fetch(url, { ...init, headers });
+    };
+
+    const server = app.listen(0);
+    try {
+      await new Promise<void>(resolve => server.once("listening", resolve));
+      const address = server.address();
+      if (!address || typeof address === "string") throw new Error("Test server did not bind to a TCP port");
+      const base = `http://127.0.0.1:${address.port}`;
+
+      const savedJobsResponse = await secondFetch(base + "/api/saved-jobs");
+      const savedJobs = await savedJobsResponse.json() as { data: unknown[]; count: number };
+      expect(savedJobsResponse.status).toBe(200);
+      expect(savedJobs.count).toBe(0);
+
+      const draftResponse = await secondFetch(base + `/api/jobs/${job.id}/application-draft`);
+      const draft = await draftResponse.json() as { data: unknown };
+      expect(draftResponse.status).toBe(200);
+      expect(draft.data).toBeNull();
+
+      const trackingResponse = await secondFetch(base + `/api/jobs/${job.id}/application-tracking`);
+      const tracking = await trackingResponse.json() as { data: unknown };
+      expect(trackingResponse.status).toBe(200);
+      expect(tracking.data).toBeNull();
+
+      const applicationsResponse = await secondFetch(base + "/api/applications");
+      const applications = await applicationsResponse.json() as { data: unknown[]; count: number };
+      expect(applicationsResponse.status).toBe(200);
+      expect(applications.count).toBe(0);
+
+      const forbiddenEdit = await secondFetch(base + `/api/jobs/${job.id}/application-draft`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          resumeSummary: "Attempted cross-account edit",
+          highlights: ["Not allowed"],
+          coverLetter: "Should not overwrite another user's draft"
+        })
+      });
+      expect(forbiddenEdit.status).toBe(404);
+
+      const originalDraft = await prisma.userApplicationDraft.findUnique({
+        where: { userId_jobId: { userId: testUserId, jobId: job.id } }
+      });
+      expect(originalDraft?.resumeSummary).toBe("First account private summary");
+      expect(originalDraft?.coverLetter).toBe("First account private cover letter");
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+    }
+  });
+
 });
