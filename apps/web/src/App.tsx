@@ -29,12 +29,13 @@ type SyncSummary = {
   inserted: number;
   updated: number;
   duplicatesSkipped: number;
+  deactivated: number;
   errors: string[];
 };
 type SyncRun = {
   id: string; provider: Provider; boardId: string;
   status: "SUCCESS" | "PARTIAL" | "FAILED";
-  fetched: number; inserted: number; updated: number; duplicatesSkipped: number;
+  fetched: number; inserted: number; updated: number; duplicatesSkipped: number; deactivated: number;
   errors: string[]; durationMs: number; startedAt: string; completedAt: string;
 };
 type Provider = "GREENHOUSE" | "LEVER" | "ASHBY";
@@ -102,6 +103,7 @@ export function App() {
   const [companyFilter, setCompanyFilter] = useState("");
   const [requiredSkills, setRequiredSkills] = useState("");
   const [sort, setSort] = useState("NEWEST");
+  const [listingStatus, setListingStatus] = useState("OPEN");
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [sourcesLoading, setSourcesLoading] = useState(false);
@@ -147,7 +149,7 @@ export function App() {
   const [searchAlerts, setSearchAlerts] = useState<Record<string, SearchAlertJob[]>>({});
   const [searchAlertMessages, setSearchAlertMessages] = useState<Record<string, string>>({});
 
-  const loadJobs = useCallback(async (filters = { query, location, source, employmentType, workMode, companyFilter, requiredSkills, sort }) => {
+  const loadJobs = useCallback(async (filters: { query: string; location: string; source: string; employmentType: string; workMode: string; companyFilter: string; requiredSkills: string; sort: string; listingStatus?: string } = { query, location, source, employmentType, workMode, companyFilter, requiredSkills, sort, listingStatus }) => {
     setLoading(true);
     setError("");
     try {
@@ -160,6 +162,7 @@ export function App() {
       if (filters.companyFilter.trim()) params.set("company", filters.companyFilter.trim());
       if (filters.requiredSkills.trim()) params.set("skills", filters.requiredSkills.trim());
       params.set("sort", filters.sort);
+      params.set("listingStatus", filters.listingStatus ?? listingStatus);
       params.set("limit", "100");
       const response = await fetch(`${API}/api/jobs?${params.toString()}`);
       if (!response.ok) throw new Error("Could not load jobs. Check that the API and database are running.");
@@ -172,7 +175,7 @@ export function App() {
     } finally {
       setLoading(false);
     }
-  }, [query, location, source, employmentType, workMode, companyFilter, requiredSkills, sort]);
+  }, [query, location, source, employmentType, workMode, companyFilter, requiredSkills, sort, listingStatus]);
 
 
 
@@ -933,6 +936,11 @@ export function App() {
       <label>Required skills (comma-separated)
         <input value={requiredSkills} onChange={event => setRequiredSkills(event.target.value)} placeholder="Node.js, PostgreSQL" />
       </label>
+      <label>Listing status
+        <select value={listingStatus} onChange={event => setListingStatus(event.target.value)}>
+          <option value="OPEN">Open listings</option><option value="INACTIVE">No longer listed</option><option value="ALL">All statuses</option>
+        </select>
+      </label>
       <label>Sort by
         <select value={sort} onChange={event => setSort(event.target.value)}>
           <option value="NEWEST">Newest first</option><option value="MATCH">Best profile match</option><option value="RELEVANCE">Best overall fit</option>
@@ -940,7 +948,7 @@ export function App() {
       </label>
       <button type="button" disabled={loading} onClick={() => void loadJobs()}>Apply filters</button>
       <button type="button" className="secondary" disabled={loading} onClick={() => {
-        setEmploymentType(""); setWorkMode("ANY"); setCompanyFilter(""); setRequiredSkills(""); setSort("NEWEST"); setSource(""); void loadJobs({ query, location, source: "", employmentType: "", workMode: "ANY", companyFilter: "", requiredSkills: "", sort: "NEWEST" });
+        setEmploymentType(""); setWorkMode("ANY"); setCompanyFilter(""); setRequiredSkills(""); setSort("NEWEST"); setSource(""); setListingStatus("OPEN"); void loadJobs({ query, location, source: "", employmentType: "", workMode: "ANY", companyFilter: "", requiredSkills: "", sort: "NEWEST", listingStatus: "OPEN" });
       }}>Clear filters</button>
     </section>}
 
@@ -984,7 +992,7 @@ export function App() {
       {syncRuns.length ? <div className="sync-history-list">
         {syncRuns.map(run => <article className="sync-history-item" key={run.id}>
           <div className="sync-history-heading"><strong>{run.boardId}</strong><span className={`sync-run-status sync-run-${run.status.toLowerCase()}`}>{run.status}</span><small>{run.provider}</small></div>
-          <div className="sync-history-stats"><span>{run.fetched} fetched</span><span>{run.inserted} new</span><span>{run.updated} updated</span><span>{run.duplicatesSkipped} duplicates</span><span>{(run.durationMs / 1000).toFixed(1)}s</span></div>
+          <div className="sync-history-stats"><span>{run.fetched} fetched</span><span>{run.inserted} new</span><span>{run.updated} updated</span><span>{run.duplicatesSkipped} duplicates</span><span>{run.deactivated} closed</span><span>{(run.durationMs / 1000).toFixed(1)}s</span></div>
           <small className="sync-history-date">{new Date(run.startedAt).toLocaleString()}</small>
           {run.errors.length > 0 && <details><summary>{run.errors.length} diagnostic message(s)</summary><ul>{run.errors.map((message, index) => <li key={index}>{message}</li>)}</ul></details>}
         </article>)}
@@ -993,7 +1001,7 @@ export function App() {
 
     {syncSummary && <section className="sync-result" aria-live="polite">
       <div><strong>Sync completed</strong><span> {syncSummary.fetched} fetched</span></div>
-      <div className="sync-stats"><span><b>{syncSummary.inserted}</b> new</span><span><b>{syncSummary.updated}</b> updated</span><span><b>{syncSummary.duplicatesSkipped}</b> duplicates skipped</span><span><b>{syncSummary.errors.length}</b> errors</span></div>
+      <div className="sync-stats"><span><b>{syncSummary.inserted}</b> new</span><span><b>{syncSummary.updated}</b> updated</span><span><b>{syncSummary.duplicatesSkipped}</b> duplicates skipped</span><span><b>{syncSummary.deactivated}</b> closed</span><span><b>{syncSummary.errors.length}</b> errors</span></div>
       {syncSummary.errors.length > 0 && <details><summary>View source errors</summary><ul>{syncSummary.errors.map((item, index) => <li key={index}>{item}</li>)}</ul></details>}
     </section>}
 
