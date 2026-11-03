@@ -60,6 +60,23 @@ describe("job sync SQLite integration", () => {
     await prisma.$disconnect();
   });
 
+  it("syncs only the requested enabled source board", async () => {
+    await prisma.jobSource.createMany({ data: [
+      { provider: "GREENHOUSE", boardId: "selected-board", displayName: "Selected" },
+      { provider: "GREENHOUSE", boardId: "other-board", displayName: "Other" }
+    ] });
+    greenhouseFetch.mockImplementation(async (boardId: string) => [{
+      ...greenhouseJob, id: `job-${boardId}`, url: `https://jobs.example.test/${boardId}`
+    }]);
+    const { syncSource } = await import("./service.js");
+    const result = await syncSource("GREENHOUSE", "selected-board");
+    expect(greenhouseFetch).toHaveBeenCalledTimes(1);
+    expect(greenhouseFetch).toHaveBeenCalledWith("selected-board");
+    expect(result).toMatchObject({ fetched: 1, inserted: 1, updated: 0, errors: [] });
+    const stored = await prisma.job.findMany({ select: { sourceBoardId: true } });
+    expect(stored.map(item => item.sourceBoardId)).toEqual(["selected-board"]);
+  });
+
   it("records per-board sync outcomes and exposes diagnostic history", async () => {
     await prisma.jobSource.create({
       data: { provider: "GREENHOUSE", boardId: "history-board", displayName: "History Board" }
