@@ -120,6 +120,50 @@ export function App() {
     }
   }, [query, location, source]);
 
+
+  const loadApplications = useCallback(async () => {
+    try {
+      const response = await fetch(API + "/api/applications");
+      const body = await response.json() as { data?: TrackedApplication[]; error?: string };
+      if (!response.ok || !body.data) throw new Error(body.error || "Could not load application tracker");
+      setApplicationRecords(body.data);
+      setTrackingByJob(Object.fromEntries(body.data.map(item => [item.jobId, {
+        status: item.status, notes: item.notes, appliedAt: item.appliedAt ?? "", followUpAt: item.followUpAt ?? ""
+      }])));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not load application tracker");
+    }
+  }, []);
+
+  function updateTracking(jobId: string, field: keyof ApplicationTracking, value: string) {
+    setTrackingByJob(current => ({
+      ...current,
+      [jobId]: { ...(current[jobId] ?? { status: "SAVED", notes: "", appliedAt: "", followUpAt: "" }), [field]: value }
+    }));
+  }
+
+  async function saveTracking(jobId: string) {
+    const value = trackingByJob[jobId] ?? { status: "SAVED" as const, notes: "", appliedAt: "", followUpAt: "" };
+    setTrackingSaving(jobId);
+    setTrackingMessage("");
+    try {
+      const response = await fetch(API + "/api/jobs/" + encodeURIComponent(jobId) + "/application-tracking", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(value)
+      });
+      const body = await response.json() as { data?: ApplicationTracking; error?: string; detail?: string };
+      if (!response.ok || !body.data) throw new Error(body.detail || body.error || "Could not save tracking details");
+      setTrackingByJob(current => ({ ...current, [jobId]: body.data! }));
+      await loadApplications();
+      setTrackingMessage("Application progress saved.");
+    } catch (e) {
+      setTrackingMessage(e instanceof Error ? e.message : "Could not save application progress");
+    } finally {
+      setTrackingSaving(null);
+    }
+  }
+
   const loadProfile = useCallback(async () => {
     try {
       const response = await fetch(`${API}/api/profile`);
@@ -476,6 +520,7 @@ export function App() {
   useEffect(() => {
     void loadSources();
     void loadProfile();
+    void loadApplications();
     void (async () => {
       try {
         const response = await fetch(`${API}/api/profile/resume`);
@@ -485,7 +530,7 @@ export function App() {
         // Resume details are optional; profile preferences remain usable.
       }
     })();
-  }, [loadSources, loadProfile]);
+  }, [loadSources, loadProfile, loadApplications]);
 
   const sourceCount = new Set(jobs.map(job => job.source)).size;
 
