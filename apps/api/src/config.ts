@@ -5,6 +5,8 @@ const schema = z.object({
   PORT: z.coerce.number().default(4000),
   DATABASE_URL: z.string().default("file:./dev.db"),
   CORS_ORIGIN: z.string().default("http://localhost:5173"),
+  AUTH_COOKIE_SECURE: z.enum(["true", "false"]).default("false").transform(value => value === "true"),
+  SESSION_TTL_DAYS: z.coerce.number().int().min(1).max(30).default(7),
   GREENHOUSE_BOARDS: z.string().default(""),
   LEVER_SITES: z.string().default(""),
   ASHBY_BOARDS: z.string().default(""),
