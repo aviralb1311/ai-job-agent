@@ -138,3 +138,21 @@ model SavedSearch {
   lastCheckedAt DateTime @default(now())
   @@index([userId])
 }
+
+
+model SyncRun {
+  id               String   @id @default(cuid())
+  provider         String
+  boardId          String
+  status           String
+  fetched          Int      @default(0)
+  inserted         Int      @default(0)
+  updated          Int      @default(0)
+  duplicatesSkipped Int     @default(0)
+  errorsJson       String   @default("[]")
+  durationMs       Int      @default(0)
+  startedAt        DateTime @default(now())
+  completedAt      DateTime
+  @@index([provider, boardId, startedAt])
+  @@index([startedAt])
+}

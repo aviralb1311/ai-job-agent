@@ -31,6 +31,12 @@ type SyncSummary = {
   duplicatesSkipped: number;
   errors: string[];
 };
+type SyncRun = {
+  id: string; provider: Provider; boardId: string;
+  status: "SUCCESS" | "PARTIAL" | "FAILED";
+  fetched: number; inserted: number; updated: number; duplicatesSkipped: number;
+  errors: string[]; durationMs: number; startedAt: string; completedAt: string;
+};
 type Provider = "GREENHOUSE" | "LEVER" | "ASHBY";
 type JobSource = {
   id: string;
@@ -104,6 +110,8 @@ export function App() {
   const [sourceMessage, setSourceMessage] = useState("");
   const [total, setTotal] = useState(0);
   const [syncSummary, setSyncSummary] = useState<SyncSummary | null>(null);
+  const [syncRuns, setSyncRuns] = useState<SyncRun[]>([]);
+  const [syncHistoryLoading, setSyncHistoryLoading] = useState(false);
   const [provider, setProvider] = useState<Provider>("GREENHOUSE");
   const [boardId, setBoardId] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -550,6 +558,20 @@ export function App() {
     }
   }, []);
 
+  const loadSyncHistory = useCallback(async () => {
+    setSyncHistoryLoading(true);
+    try {
+      const response = await fetch(`${API}/api/sync-runs?limit=20`);
+      const body = await response.json() as { data?: SyncRun[]; error?: string };
+      if (!response.ok || !body.data) throw new Error(body.error || "Could not load sync history");
+      setSyncRuns(body.data);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not load sync history");
+    } finally {
+      setSyncHistoryLoading(false);
+    }
+  }, []);
+
   const loadSources = useCallback(async () => {
     setSourcesLoading(true);
     try {
@@ -573,7 +595,7 @@ export function App() {
       const body = await response.json();
       if (!response.ok) throw new Error(body.detail || body.error || "Job sync failed");
       setSyncSummary(body as SyncSummary);
-      await loadJobs();
+      await Promise.all([loadJobs(), loadSources(), loadSyncHistory()]);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Sync failed");
     } finally {
@@ -688,6 +710,7 @@ export function App() {
 
   useEffect(() => {
     void loadSources();
+    void loadSyncHistory();
     void loadProfile();
     void loadApplications();
     void loadSavedSearches();
@@ -700,7 +723,7 @@ export function App() {
         // Resume details are optional; profile preferences remain usable.
       }
     })();
-  }, [loadSources, loadProfile, loadApplications, loadSavedSearches]);
+  }, [loadSources, loadSyncHistory, loadProfile, loadApplications, loadSavedSearches]);
 
   const sourceCount = new Set(jobs.map(job => job.source)).size;
 
@@ -931,6 +954,21 @@ export function App() {
         </article>)}
       </div>}
       {!savedSearches.length && <p className="form-hint">No saved searches yet. Apply your filters above, name the search, and save it here.</p>}
+    </section>
+
+    <section className="sync-history">
+      <div className="section-heading">
+        <div><span className="eyebrow-dark">SOURCE DIAGNOSTICS</span><h3>Recent sync history</h3><p>Per-board outcomes from completed sync attempts. Partial runs may still contain usable listings.</p></div>
+        <button className="secondary" type="button" disabled={syncHistoryLoading} onClick={() => void loadSyncHistory()}>{syncHistoryLoading ? "Refreshing…" : "Refresh history"}</button>
+      </div>
+      {syncRuns.length ? <div className="sync-history-list">
+        {syncRuns.map(run => <article className="sync-history-item" key={run.id}>
+          <div className="sync-history-heading"><strong>{run.boardId}</strong><span className={`sync-run-status sync-run-${run.status.toLowerCase()}`}>{run.status}</span><small>{run.provider}</small></div>
+          <div className="sync-history-stats"><span>{run.fetched} fetched</span><span>{run.inserted} new</span><span>{run.updated} updated</span><span>{run.duplicatesSkipped} duplicates</span><span>{(run.durationMs / 1000).toFixed(1)}s</span></div>
+          <small className="sync-history-date">{new Date(run.startedAt).toLocaleString()}</small>
+          {run.errors.length > 0 && <details><summary>{run.errors.length} diagnostic message(s)</summary><ul>{run.errors.map((message, index) => <li key={index}>{message}</li>)}</ul></details>}
+        </article>)}
+      </div> : <p className="form-hint">{syncHistoryLoading ? "Loading sync history…" : "No sync attempts recorded yet. Run a job sync to create the first history entry."}</p>}
     </section>
 
     {syncSummary && <section className="sync-result" aria-live="polite">

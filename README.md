@@ -168,3 +168,13 @@ The API exposes a starter catalog of candidate Greenhouse, Lever, and Ashby boar
 - The freshness label is derived from the newest stored `lastVerifiedAt` timestamp for that provider: recently verified (within 7 days), stale (older than 7 days), not verified, or no listings.
 - This is a database-derived freshness indicator, **not** a live provider connectivity check. Use the existing **Validate** action or live source smoke test to test whether a public board is currently reachable.
 - A database migration adds per-job board attribution. Existing postings receive their board attribution on their next successful sync; until then, they are not counted under an individual board.
+
+
+## Per-board sync history and diagnostics (Phase 1.22)
+
+- Every board included in a sync attempt gets a persisted history record with provider, board ID, outcome (success, partial, or failed), fetched/inserted/updated/duplicate counts, duration, timestamps, and diagnostic messages.
+- The dashboard shows the 20 most recent board-level attempts and lets the user refresh that history.
+- A partial run means the board fetch completed but one or more individual job records failed processing. A failed run means the board fetch itself failed or its provider is unsupported.
+- The API supports optional `limit`, `provider`, and `boardId` filters at `GET /api/sync-runs`; the limit is bounded to 1–100.
+- History is recorded only when a sync is explicitly run. This phase does not add a background scheduler or automatic polling.
+- After pulling this phase, run `npm run db:generate` and `npm run db:push` from the repository root to add the `SyncRun` table to the local SQLite database.
