@@ -5,17 +5,27 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AI Job Agent</title>
   <style>
-    body { width: 300px; margin: 0; padding: 18px; color: #0f172a; background: #fff; font: 14px/1.5 Arial, sans-serif; }
+    body { width: 320px; margin: 0; padding: 18px; color: #0f172a; background: #fff; font: 14px/1.5 Arial, sans-serif; }
     h1 { margin: 0 0 8px; font-size: 18px; }
     p { margin: 0 0 12px; color: #475569; }
-    .status { padding: 10px 12px; border-radius: 8px; background: #eff6ff; color: #1e40af; }
-    .note { margin-top: 12px; font-size: 12px; }
+    label { display:block; margin:12px 0 5px; font-weight:600; }
+    input { box-sizing:border-box; width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:7px; font:inherit; letter-spacing:1px; }
+    button { width:100%; margin-top:10px; padding:10px; border:0; border-radius:7px; background:#1d4ed8; color:white; font-weight:600; cursor:pointer; }
+    button.secondary { background:#475569; }
+    .status { padding:10px 12px; border-radius:8px; background:#eff6ff; color:#1e40af; }
+    .note { margin-top:12px; font-size:12px; }
+    #message { min-height:20px; margin-top:10px; overflow-wrap:anywhere; }
   </style>
 </head>
 <body>
   <h1>AI Job Agent</h1>
-  <p class="status">Extension installed successfully.</p>
-  <p>Open a Greenhouse job application page. The page helper will detect supported application forms.</p>
-  <p class="note">Profile connection and autofill are coming next. This extension never submits applications.</p>
+  <p class="status" id="connection-status">Not connected to your account.</p>
+  <label for="pairing-code">One-time pairing code</label>
+  <input id="pairing-code" inputmode="text" autocomplete="one-time-code" maxlength="12" placeholder="12-character code">
+  <button id="connect-button" type="button">Connect account</button>
+  <button id="disconnect-button" class="secondary" type="button">Disconnect</button>
+  <p id="message" role="status"></p>
+  <p class="note">Pair using a code generated from your signed-in AI Job Agent profile. Codes expire in 5 minutes. The extension never submits applications.</p>
+  <script src="popup.js"></script>
 </body>
 </html>
