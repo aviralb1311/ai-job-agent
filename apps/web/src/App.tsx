@@ -75,7 +75,10 @@ type JobFitAnalysis = {
   strengths: string[]; gaps: string[]; recommendations: string[]; disclaimer: string;
 };
 const EMPTY_PROFILE: CandidateProfile = { skills: [], preferredRoles: [], locations: [], remotePreference: "ANY" };
-const API = "http://localhost:4000";
+const API = import.meta.env.VITE_API_URL || "http://localhost:4000";
+type AuthUser = { id: string; email: string; role: "USER" | "ADMIN" };
+const apiFetch = (input: RequestInfo | URL, init: RequestInit = {}) =>
+  fetch(input, { ...init, credentials: "include" });
 
 
 function formatJobDescription(description: string): string {
@@ -94,6 +97,12 @@ function formatJobDescription(description: string): string {
 
 export function App() {
   const [jobs, setJobs] = useState<Job[]>([]);
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [authMode, setAuthMode] = useState<"login" | "register">("login");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authBusy, setAuthBusy] = useState(false);
+  const [authMessage, setAuthMessage] = useState("");
   const [sources, setSources] = useState<JobSource[]>([]);
   const [catalog, setCatalog] = useState<SourceCatalogEntry[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(false);
@@ -166,7 +175,7 @@ export function App() {
       params.set("sort", filters.sort);
       params.set("listingStatus", filters.listingStatus ?? listingStatus);
       params.set("limit", "100");
-      const response = await fetch(`${API}/api/jobs?${params.toString()}`);
+      const response = await apiFetch(`${API}/api/jobs?${params.toString()}`);
       if (!response.ok) throw new Error("Could not load jobs. Check that the API and database are running.");
       const body = await response.json() as { data: Job[]; total: number };
       setJobs(body.data);
@@ -184,7 +193,7 @@ export function App() {
 
   const loadSavedSearches = useCallback(async () => {
     try {
-      const response = await fetch(API + "/api/saved-searches");
+      const response = await apiFetch(API + "/api/saved-searches");
       const body = await response.json() as { data?: SavedSearch[]; error?: string };
       if (!response.ok || !body.data) throw new Error(body.error || "Could not load saved searches");
       setSavedSearches(body.data);
@@ -204,7 +213,7 @@ export function App() {
         query: query.trim(), location: location.trim(), company: companyFilter.trim(),
         source, employmentType, workMode, sort, skills: requiredSkills.split(",").map(item => item.trim()).filter(Boolean)
       };
-      const response = await fetch(API + "/api/saved-searches", {
+      const response = await apiFetch(API + "/api/saved-searches", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, filters })
@@ -240,7 +249,7 @@ export function App() {
     setCheckingSearchId(search.id);
     setSearchAlertMessages(current => ({ ...current, [search.id]: "" }));
     try {
-      const response = await fetch(API + "/api/saved-searches/" + encodeURIComponent(search.id) + "/alerts");
+      const response = await apiFetch(API + "/api/saved-searches/" + encodeURIComponent(search.id) + "/alerts");
       const body = await response.json() as { data?: SearchAlertJob[]; count?: number; error?: string; detail?: string };
       if (!response.ok || !body.data) throw new Error(body.detail || body.error || "Could not check alerts");
       setSearchAlerts(current => ({ ...current, [search.id]: body.data! }));
@@ -255,7 +264,7 @@ export function App() {
 
   async function deleteSavedSearch(search: SavedSearch) {
     try {
-      const response = await fetch(API + "/api/saved-searches/" + encodeURIComponent(search.id), { method: "DELETE" });
+      const response = await apiFetch(API + "/api/saved-searches/" + encodeURIComponent(search.id), { method: "DELETE" });
       const body = await response.json() as { error?: string };
       if (!response.ok) throw new Error(body.error || "Could not delete saved search");
       setSavedSearches(current => current.filter(item => item.id !== search.id));
@@ -269,7 +278,7 @@ export function App() {
     setSavedJobsBusy(true);
     setError("");
     try {
-      const response = await fetch(API + "/api/saved-jobs");
+      const response = await apiFetch(API + "/api/saved-jobs");
       const body = await response.json() as { data?: Job[]; count?: number; error?: string };
       if (!response.ok || !body.data) throw new Error(body.error || "Could not load saved jobs");
       setJobs(body.data);
@@ -286,7 +295,7 @@ export function App() {
     setSavingJobId(job.id);
     setError("");
     try {
-      const response = await fetch(API + "/api/jobs/" + encodeURIComponent(job.id) + "/save", {
+      const response = await apiFetch(API + "/api/jobs/" + encodeURIComponent(job.id) + "/save", {
         method: job.isSaved ? "DELETE" : "POST"
       });
       const body = await response.json() as { error?: string };
@@ -306,7 +315,7 @@ export function App() {
 
   const loadApplications = useCallback(async () => {
     try {
-      const response = await fetch(API + "/api/applications");
+      const response = await apiFetch(API + "/api/applications");
       const body = await response.json() as { data?: TrackedApplication[]; error?: string };
       if (!response.ok || !body.data) throw new Error(body.error || "Could not load application tracker");
       setApplicationRecords(body.data);
@@ -330,7 +339,7 @@ export function App() {
     setTrackingSaving(jobId);
     setTrackingMessage("");
     try {
-      const response = await fetch(API + "/api/jobs/" + encodeURIComponent(jobId) + "/application-tracking", {
+      const response = await apiFetch(API + "/api/jobs/" + encodeURIComponent(jobId) + "/application-tracking", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(value)
@@ -349,7 +358,7 @@ export function App() {
 
   const loadProfile = useCallback(async () => {
     try {
-      const response = await fetch(`${API}/api/profile`);
+      const response = await apiFetch(`${API}/api/profile`);
       const body = await response.json() as { data?: CandidateProfile; error?: string };
       if (!response.ok || !body.data) throw new Error(body.error || "Could not load candidate profile");
       setProfile(body.data);
@@ -369,7 +378,7 @@ export function App() {
     try {
       const split = (value: string) => value.split(",").map(item => item.trim()).filter(Boolean);
       const payload = { skills: split(profileSkills), preferredRoles: split(profileRoles), locations: split(profileLocations), remotePreference };
-      const response = await fetch(`${API}/api/profile`, {
+      const response = await apiFetch(`${API}/api/profile`, {
         method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
       });
       const body = await response.json() as { data?: CandidateProfile; error?: string; detail?: string };
@@ -393,7 +402,7 @@ export function App() {
     setAnalysisBusy(jobId);
     setError("");
     try {
-      const response = await fetch(`${API}/api/jobs/${encodeURIComponent(jobId)}/analyze`);
+      const response = await apiFetch(`${API}/api/jobs/${encodeURIComponent(jobId)}/analyze`);
       const body = await response.json() as { data?: JobFitAnalysis; error?: string; detail?: string };
       if (!response.ok || !body.data) throw new Error(body.detail || body.error || "Could not analyze job fit");
       setAnalysis({ jobId, data: body.data });
@@ -416,14 +425,14 @@ export function App() {
     setError("");
     try {
       const path = API + "/api/jobs/" + encodeURIComponent(jobId) + "/application-draft";
-      const existingResponse = await fetch(path);
+      const existingResponse = await apiFetch(path);
       const existingBody = await existingResponse.json() as { data?: ApplicationDraft | null; error?: string };
       if (!existingResponse.ok) throw new Error(existingBody.error || "Could not load application draft");
       if (existingBody.data) {
         setApplicationDraft({ jobId, data: existingBody.data });
         return;
       }
-      const response = await fetch(path, { method: "POST" });
+      const response = await apiFetch(path, { method: "POST" });
       const body = await response.json() as { data?: ApplicationDraft; error?: string; detail?: string };
       if (!response.ok || !body.data) throw new Error(body.detail || body.error || "Could not prepare application draft");
       setApplicationDraft({ jobId, data: body.data });
@@ -454,7 +463,7 @@ export function App() {
     setDraftBusy(applicationDraft.jobId);
     setDraftMessage("");
     try {
-      const response = await fetch(API + "/api/jobs/" + encodeURIComponent(applicationDraft.jobId) + "/application-draft", {
+      const response = await apiFetch(API + "/api/jobs/" + encodeURIComponent(applicationDraft.jobId) + "/application-draft", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -482,7 +491,7 @@ export function App() {
     if (!saved) return;
     setDraftBusy(applicationDraft.jobId);
     try {
-      const response = await fetch(API + "/api/jobs/" + encodeURIComponent(applicationDraft.jobId) + "/application-draft/review", { method: "POST" });
+      const response = await apiFetch(API + "/api/jobs/" + encodeURIComponent(applicationDraft.jobId) + "/application-draft/review", { method: "POST" });
       const body = await response.json() as { data?: ApplicationDraft; message?: string; error?: string; detail?: string };
       if (!response.ok || !body.data) throw new Error(body.detail || body.error || "Could not mark draft reviewed");
       setApplicationDraft({ jobId: applicationDraft.jobId, data: body.data });
@@ -503,7 +512,7 @@ export function App() {
       const contentType = resumeFile.type || (resumeFile.name.toLowerCase().endsWith(".pdf")
         ? "application/pdf"
         : "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
-      const response = await fetch(`${API}/api/resume/parse`, {
+      const response = await apiFetch(`${API}/api/resume/parse`, {
         method: "POST",
         headers: { "Content-Type": contentType },
         body: resumeFile
@@ -532,7 +541,7 @@ export function App() {
     setResumeBusy(true);
     setResumeMessage("");
     try {
-      const response = await fetch(`${API}/api/profile/resume`, {
+      const response = await apiFetch(`${API}/api/profile/resume`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(resumeDraft)
@@ -553,7 +562,7 @@ export function App() {
   const loadCatalog = useCallback(async () => {
     setCatalogLoading(true);
     try {
-      const response = await fetch(`${API}/api/sources/catalog`);
+      const response = await apiFetch(`${API}/api/sources/catalog`);
       const body = await response.json() as { data?: SourceCatalogEntry[]; error?: string };
       if (!response.ok) throw new Error(body.error || "Could not load starter catalog");
       setCatalog(body.data ?? []);
@@ -567,7 +576,7 @@ export function App() {
   const loadSyncHistory = useCallback(async () => {
     setSyncHistoryLoading(true);
     try {
-      const response = await fetch(`${API}/api/sync-runs?limit=20`);
+      const response = await apiFetch(`${API}/api/sync-runs?limit=20`);
       const body = await response.json() as { data?: SyncRun[]; error?: string };
       if (!response.ok || !body.data) throw new Error(body.error || "Could not load sync history");
       setSyncRuns(body.data);
@@ -581,7 +590,7 @@ export function App() {
   const loadSources = useCallback(async () => {
     setSourcesLoading(true);
     try {
-      const response = await fetch(`${API}/api/sources`);
+      const response = await apiFetch(`${API}/api/sources`);
       const body = await response.json() as { data?: JobSource[]; error?: string };
       if (!response.ok) throw new Error(body.error || "Could not load configured sources");
       setSources(body.data ?? []);
@@ -597,7 +606,7 @@ export function App() {
     setError("");
     setSyncSummary(null);
     try {
-      const response = await fetch(`${API}/api/jobs/sync`, { method: "POST" });
+      const response = await apiFetch(`${API}/api/jobs/sync`, { method: "POST" });
       const body = await response.json();
       if (!response.ok) throw new Error(body.detail || body.error || "Job sync failed");
       setSyncSummary(body as SyncSummary);
@@ -616,7 +625,7 @@ export function App() {
     setPreview(null);
     setError("");
     try {
-      const response = await fetch(`${API}/api/sources`, {
+      const response = await apiFetch(`${API}/api/sources`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ provider, boardId: boardId.trim(), displayName: displayName.trim() })
@@ -629,7 +638,7 @@ export function App() {
       setBoardId("");
       setDisplayName("");
 
-      const testResponse = await fetch(`${API}/api/sources/${saved.id}/test`, { method: "POST" });
+      const testResponse = await apiFetch(`${API}/api/sources/${saved.id}/test`, { method: "POST" });
       const testBody = await testResponse.json() as SourcePreview;
       if (!testResponse.ok || !testBody.success) {
         setSourceMessage(`Source saved, but validation failed: ${testBody.detail || testBody.error || "Provider did not respond successfully"}`);
@@ -649,7 +658,7 @@ export function App() {
     setSourceMessage("");
     setPreview(null);
     try {
-      const response = await fetch(`${API}/api/sources`, {
+      const response = await apiFetch(`${API}/api/sources`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ provider: item.provider, boardId: item.boardId, displayName: item.displayName })
@@ -664,7 +673,7 @@ export function App() {
       }
       const saved = body.data;
       setSources(current => [saved, ...current]);
-      const testResponse = await fetch(`${API}/api/sources/${saved.id}/test`, { method: "POST" });
+      const testResponse = await apiFetch(`${API}/api/sources/${saved.id}/test`, { method: "POST" });
       const testBody = await testResponse.json() as SourcePreview;
       if (!testResponse.ok || !testBody.success) {
         setSourceMessage(`${item.displayName} was saved, but live validation failed: ${testBody.detail || testBody.error || "Provider did not respond successfully"}`);
@@ -684,7 +693,7 @@ export function App() {
     setError("");
     setSourceMessage("");
     try {
-      const response = await fetch(`${API}/api/sources/${item.id}/sync`, { method: "POST" });
+      const response = await apiFetch(`${API}/api/sources/${item.id}/sync`, { method: "POST" });
       const body = await response.json() as { data?: SyncSummary; error?: string; detail?: string };
       if (!response.ok || !body.data) throw new Error(body.detail || body.error || "Source sync failed");
       setSourceMessage(`${item.displayName || item.boardId}: sync completed — ${body.data.fetched} fetched, ${body.data.inserted} new, ${body.data.updated} updated, ${body.data.errors.length} errors.`);
@@ -700,7 +709,7 @@ export function App() {
   async function toggleSource(item: JobSource) {
     setError("");
     try {
-      const response = await fetch(`${API}/api/sources/${item.id}`, {
+      const response = await apiFetch(`${API}/api/sources/${item.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ enabled: !item.enabled })
@@ -717,7 +726,7 @@ export function App() {
     if (!window.confirm(`Remove ${item.displayName || item.boardId} from configured sources?`)) return;
     setError("");
     try {
-      const response = await fetch(`${API}/api/sources/${item.id}`, { method: "DELETE" });
+      const response = await apiFetch(`${API}/api/sources/${item.id}`, { method: "DELETE" });
       if (!response.ok) {
         const body = await response.json() as { error?: string };
         throw new Error(body.error || "Could not remove source");
@@ -730,25 +739,26 @@ export function App() {
 
   useEffect(() => {
     void loadJobs();
+    void (async () => {
+      try {
+        const response = await apiFetch(`${API}/api/auth/me`);
+        if (!response.ok) return;
+        const body = await response.json() as { data?: { user?: AuthUser } };
+        if (body.data?.user) {
+          setUser(body.data.user);
+          await loadPrivateWorkspace();
+        }
+      } catch {
+        // Public job browsing remains available without a session.
+      }
+    })();
   }, [loadJobs]);
 
   useEffect(() => {
     void loadSources();
     void loadCatalog();
     void loadSyncHistory();
-    void loadProfile();
-    void loadApplications();
-    void loadSavedSearches();
-    void (async () => {
-      try {
-        const response = await fetch(`${API}/api/profile/resume`);
-        const body = await response.json() as { data?: ResumeDraft };
-        if (response.ok && body.data) setResumeDraft(body.data);
-      } catch {
-        // Resume details are optional; profile preferences remain usable.
-      }
-    })();
-  }, [loadSources, loadCatalog, loadSyncHistory, loadProfile, loadApplications, loadSavedSearches]);
+  }, [loadSources, loadCatalog, loadSyncHistory]);
 
   const sourceCount = new Set(jobs.map(job => job.source)).size;
 
@@ -757,7 +767,19 @@ export function App() {
       <div className="brand-mark">JA</div>
       <div><h1>AI Job Agent</h1><p>Discover opportunities. Keep every application in your control.</p></div>
       <span className="header-pill"><span className="live-dot" /> Discovery workspace</span>
+      {user ? <div className="account-controls"><span>{user.email}</span><button className="secondary" type="button" onClick={() => void signOut()}>Sign out</button></div> : <span className="account-controls">Browsing as guest</span>}
     </header>
+
+    {!user && <section className="auth-panel">
+      <div className="section-heading"><div><span className="eyebrow-dark">YOUR ACCOUNT</span><h3>{authMode === "login" ? "Sign in to your workspace" : "Create your free account"}</h3><p>Browse jobs publicly. Sign in to save jobs, upload your resume, and manage applications privately.</p></div></div>
+      <form className="auth-form" onSubmit={submitAuth}>
+        <label>Email<input type="email" autoComplete="email" required value={authEmail} onChange={event => setAuthEmail(event.target.value)} placeholder="you@example.com" /></label>
+        <label>Password<input type="password" autoComplete={authMode === "login" ? "current-password" : "new-password"} minLength={12} required value={authPassword} onChange={event => setAuthPassword(event.target.value)} placeholder="At least 12 characters" /></label>
+        <button type="submit" disabled={authBusy}>{authBusy ? "Please wait…" : authMode === "login" ? "Sign in" : "Create account"}</button>
+        <button type="button" className="secondary" onClick={() => { setAuthMode(current => current === "login" ? "register" : "login"); setAuthMessage(""); }}>{authMode === "login" ? "Create a free account" : "Already have an account? Sign in"}</button>
+      </form>
+      {authMessage && <p className="resume-message" role="status">{authMessage}</p>}
+    </section>}
 
     <section className="hero">
       <span className="eyebrow">PHASE 1 · JOB DISCOVERY</span>
@@ -776,7 +798,7 @@ export function App() {
       <article className="metric"><span>Configured boards</span><strong>{sources.length}</strong><small>{sources.filter(item => item.enabled).length} enabled</small></article>
     </section>
 
-    <section className="profile-section">
+    {user && <section className="profile-section">
       <div className="section-heading">
         <div><span className="eyebrow-dark">YOUR CANDIDATE PROFILE</span><h3>What are you looking for?</h3><p>Set preferences to calculate transparent job relevance scores. No resume upload or AI API key is required.</p></div>
         <span className="profile-status">{profile.skills.length + profile.preferredRoles.length + profile.locations.length ? "Profile configured" : "Not configured"}</span>
@@ -834,9 +856,9 @@ export function App() {
         <button type="button" disabled={resumeBusy} onClick={() => void saveResume()}>{resumeBusy ? "Saving…" : "Approve & save to profile"}</button>
       </div>}
       <p className="form-hint">Extraction is heuristic and may miss sections, especially in multi-column or scanned resumes. Review and correct all entries. Scanned-image OCR is not included. Uploads are processed in memory and are not stored as files.</p>
-    </section>
+    </section>}
 
-    <section className="source-manager">
+    {user?.role === "ADMIN" && <section className="source-manager">
       <div className="section-heading">
         <div><span className="eyebrow-dark">SOURCE MANAGEMENT</span><h3>Company career boards</h3><p>Add public job boards and validate the connection before syncing.</p></div>
         <button className="secondary" disabled={sourcesLoading} onClick={() => void loadSources()}>{sourcesLoading ? "Loading…" : "Refresh sources"}</button>
@@ -880,10 +902,11 @@ export function App() {
           <button className="small-action secondary" disabled={!item.enabled || syncingSourceId !== null} onClick={() => void syncOneSource(item)}>{syncingSourceId === item.id ? "Revalidating…" : item.health && item.health.expiredListingCount + item.health.staleListingCount > 0 ? "Revalidate board" : "Sync now"}</button>
           <button className="small-action secondary" onClick={() => void toggleSource(item)}>{item.enabled ? "Disable" : "Enable"}</button>
           <button className="small-action danger-action" onClick={() => void removeSource(item)}>Remove</button>
-        </article>)}
+          </details>}
+      </article>)}
         {!sources.length && !sourcesLoading && <div className="source-empty">No database-managed boards yet. Add your first public career board above.</div>}
       </div>
-    </section>
+    </section>}
 
     <section className="catalog-section">
       <div className="section-heading">
@@ -956,7 +979,7 @@ export function App() {
     </section>}
 
 
-    <section className="saved-search-section">
+    {user && <section className="saved-search-section">
       <div className="section-heading">
         <div><span className="eyebrow-dark">SAVED SEARCHES</span><h3>Keep an eye on matching roles</h3><p>Save the current filters and manually check for newly discovered matching jobs. Alerts stay in this dashboard.</p></div>
       </div>
@@ -985,9 +1008,9 @@ export function App() {
         </article>)}
       </div>}
       {!savedSearches.length && <p className="form-hint">No saved searches yet. Apply your filters above, name the search, and save it here.</p>}
-    </section>
+    </section>}
 
-    <section className="sync-history">
+    {user?.role === "ADMIN" && <section className="sync-history">
       <div className="section-heading">
         <div><span className="eyebrow-dark">SOURCE DIAGNOSTICS</span><h3>Recent sync history</h3><p>Per-board outcomes from completed sync attempts. Partial runs may still contain usable listings.</p></div>
         <button className="secondary" type="button" disabled={syncHistoryLoading} onClick={() => void loadSyncHistory()}>{syncHistoryLoading ? "Refreshing…" : "Refresh history"}</button>
@@ -1000,16 +1023,16 @@ export function App() {
           {run.errors.length > 0 && <details><summary>{run.errors.length} diagnostic message(s)</summary><ul>{run.errors.map((message, index) => <li key={index}>{message}</li>)}</ul></details>}
         </article>)}
       </div> : <p className="form-hint">{syncHistoryLoading ? "Loading sync history…" : "No sync attempts recorded yet. Run a job sync to create the first history entry."}</p>}
-    </section>
+    </section>}
 
-    {syncSummary && <section className="sync-result" aria-live="polite">
+    {user?.role === "ADMIN" && syncSummary && <section className="sync-result" aria-live="polite">
       <div><strong>Sync completed</strong><span> {syncSummary.fetched} fetched</span></div>
       <div className="sync-stats"><span><b>{syncSummary.inserted}</b> new</span><span><b>{syncSummary.updated}</b> updated</span><span><b>{syncSummary.duplicatesSkipped}</b> duplicates skipped</span><span><b>{syncSummary.deactivated}</b> closed</span><span><b>{syncSummary.errors.length}</b> errors</span></div>
       {syncSummary.errors.length > 0 && <details><summary>View source errors</summary><ul>{syncSummary.errors.map((item, index) => <li key={index}>{item}</li>)}</ul></details>}
     </section>}
 
 
-    <section className="tracker-overview">
+    {user && <section className="tracker-overview">
       <div className="section-heading"><div><span className="eyebrow-dark">APPLICATION PIPELINE</span><h3>Track your applications</h3><p>Keep a record of progress, application dates, notes and follow-ups. Updates are manual; nothing is sent to employers.</p></div><button className="secondary" type="button" onClick={() => void loadApplications()}>Refresh tracker</button></div>
       <div className="tracker-stats">
         <article><span>Tracked</span><strong>{applicationRecords.length}</strong></article>
@@ -1023,7 +1046,7 @@ export function App() {
       </div>}
     </section>
 
-    <FollowUpQueue />
+    {user && <FollowUpQueue />}
 
     {error && <div className="error" role="alert">{error}</div>}
 
@@ -1053,17 +1076,18 @@ export function App() {
         {!!job.skills?.length && <div className="skill-tags">{job.skills.slice(0, 8).map(skill => <span key={skill}>{skill}</span>)}</div>}
         {!!job.match?.matchedSkills.length && <p className="match-reason">Matched: {job.match.matchedSkills.join(", ")}</p>}
         <div className="job-actions">
-          <button className="small-action secondary" type="button" disabled={savingJobId === job.id} onClick={() => void toggleSavedJob(job)} aria-label={job.isSaved ? "Remove from saved jobs" : "Save job"}>
+          {user && <button className="small-action secondary" type="button" disabled={savingJobId === job.id} onClick={() => void toggleSavedJob(job)} aria-label={job.isSaved ? "Remove from saved jobs" : "Save job"}>
             {savingJobId === job.id ? "Saving…" : job.isSaved ? "★ Saved" : "☆ Save job"}
           </button>
           <button className="small-action secondary" type="button" disabled={analysisBusy === job.id} onClick={() => void analyzeFit(job.id)}>
             {analysisBusy === job.id ? "Analyzing…" : analysis?.jobId === job.id ? "Hide fit analysis" : "Analyze resume fit"}
           </button>
+          </button>}
           <a href={job.applicationUrl} target="_blank" rel="noreferrer">View original listing ↗</a>
         </div>
 
 
-        <details className="application-tracking">
+        {user && <details className="application-tracking">
           <summary>Track application progress</summary>
           <div className="tracking-fields">
             <label>Status
@@ -1084,10 +1108,10 @@ export function App() {
           </div>
           {trackingMessage && <p className="resume-message" role="status">{trackingMessage}</p>}
         </details>
-        <button className="small-action secondary" type="button" disabled={draftBusy === job.id} onClick={() => void openApplicationDraft(job.id)}>
+        {user && <button className="small-action secondary" type="button" disabled={draftBusy === job.id} onClick={() => void openApplicationDraft(job.id)}>
           {draftBusy === job.id ? "Preparing…" : applicationDraft?.jobId === job.id ? "Hide application draft" : "Prepare application"}
         </button>
-        {applicationDraft?.jobId === job.id && <div className="application-draft-panel">
+        {user && applicationDraft?.jobId === job.id && <div className="application-draft-panel">
           <div className="fit-analysis-top"><strong>Editable application draft</strong><span>{applicationDraft.data.status === "REVIEWED" ? "Reviewed for manual use" : "Draft · Not reviewed"}</span></div>
           <p className="form-hint">Generated only from your saved candidate profile and reviewed resume entries. Check every claim and personalize the wording. Nothing is submitted or sent.</p>
           <label>Resume tailoring summary
@@ -1108,7 +1132,7 @@ export function App() {
           {draftMessage && <p className="resume-message" role="status">{draftMessage}</p>}
           <p className="fit-disclaimer">Reviewed means you approved this text for your own manual use only. It is not an application submission or authorization for automated contact.</p>
         </div>}
-        {analysis?.jobId === job.id && <div className="fit-analysis">
+        {user && analysis?.jobId === job.id && <div className="fit-analysis">
           <div className="fit-analysis-top"><strong>Resume-to-job analysis</strong><span>{analysis.data.score === null ? "Add preferences to calculate a score" : `${analysis.data.score}% profile match`}</span></div>
           <div className="fit-breakdown">
             <span>Skills: {analysis.data.breakdown.skills.score === null ? "Not set" : `${analysis.data.breakdown.skills.score}%`} ({analysis.data.breakdown.skills.matched}/{analysis.data.breakdown.skills.total})</span>
