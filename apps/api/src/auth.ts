@@ -79,7 +79,11 @@ export async function register(req: Request, res: Response): Promise<void> {
   const email = parsed.data.email.toLowerCase();
   try {
     const user = await prisma.user.create({
-      data: { email, passwordHash: await hashPassword(parsed.data.password), role: "USER" },
+      data: {
+        email,
+        passwordHash: await hashPassword(parsed.data.password),
+        role: config.ADMIN_EMAILS.split(",").map(value => value.trim().toLowerCase()).filter(Boolean).includes(email) ? "ADMIN" : "USER"
+      },
       select: { id: true, email: true, role: true }
     });
     await issueSession(user.id, res);
@@ -164,4 +168,15 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   } catch {
     res.status(500).json({ error: "Unable to validate session." });
   }
+}
+
+
+export function requireAdmin(req: Request, res: Response, next: NextFunction): void {
+  void requireAuth(req, res, () => {
+    if (res.locals.userRole !== "ADMIN") {
+      res.status(403).json({ error: "Administrator access required." });
+      return;
+    }
+    next();
+  });
 }
