@@ -65,7 +65,7 @@ type ResumeDraft = { skills: string[]; education: string[]; experience: string[]
 type ApplicationStatus = "SAVED" | "PREPARING" | "APPLIED" | "INTERVIEW" | "OFFER" | "REJECTED" | "WITHDRAWN";
 type ApplicationTracking = { status: ApplicationStatus; notes: string; appliedAt: string; followUpAt: string };
 type TrackedApplication = ApplicationTracking & { jobId: string; job: { id: string; title: string; company: string; location: string | null; applicationUrl: string } };
-type ApplicationDraft = { id: string; jobId: string; resumeSummary: string; highlights: string[]; coverLetter: string; reviewNotes: string[]; status: "DRAFT" | "REVIEWED"; reviewedAt: string | null; createdAt: string; updatedAt: string };
+type ApplicationDraft = { id: string; jobId: string; resumeSummary: string; highlights: string[]; coverLetter: string; reviewNotes: string[]; status: "DRAFT" | "REVIEWED"; workflowStatus: "DRAFT" | "READY_FOR_REVIEW" | "APPROVED"; approvedAt: string | null; reviewedAt: string | null; createdAt: string; updatedAt: string };
 type JobFitAnalysis = {
   score: number | null;
   breakdown: { skills: { score: number | null; matched: number; total: number; weight: number }; role: { matched: boolean | null; weight: number }; location: { matched: boolean | null; weight: number } };
@@ -498,6 +498,27 @@ export function App() {
       setDraftMessage(body.message || "Marked reviewed for manual use only.");
     } catch (e) {
       setDraftMessage(e instanceof Error ? e.message : "Could not mark draft reviewed");
+    } finally {
+      setDraftBusy(null);
+    }
+  }
+
+  async function approveApplicationDraft() {
+    if (!applicationDraft || applicationDraft.data.workflowStatus !== "READY_FOR_REVIEW") return;
+    const confirmed = window.confirm("Approve this application draft? This records your approval only; it will NOT submit the application.");
+    if (!confirmed) return;
+    setDraftBusy(applicationDraft.jobId);
+    setDraftMessage("");
+    try {
+      const response = await apiFetch(API + "/api/jobs/" + encodeURIComponent(applicationDraft.jobId) + "/application-draft/approve", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ approved: true })
+      });
+      const body = await response.json() as { data?: ApplicationDraft; error?: string; detail?: string };
+      if (!response.ok || !body.data) throw new Error(body.detail || body.error || "Could not record approval");
+      setApplicationDraft({ jobId: applicationDraft.jobId, data: body.data });
+      setDraftMessage("Your approval is recorded. The application has NOT been submitted.");
+    } catch (e) {
+      setDraftMessage(e instanceof Error ? e.message : "Could not record approval");
     } finally {
       setDraftBusy(null);
     }
@@ -1176,7 +1197,7 @@ export function App() {
           {draftBusy === job.id ? "Preparing…" : applicationDraft?.jobId === job.id ? "Hide application draft" : "Prepare application"}
         </button>}
         {user && applicationDraft?.jobId === job.id && <div className="application-draft-panel">
-          <div className="fit-analysis-top"><strong>Editable application draft</strong><span>{applicationDraft.data.status === "REVIEWED" ? "Reviewed for manual use" : "Draft · Not reviewed"}</span></div>
+          <div className="fit-analysis-top"><strong>Editable application draft</strong><span>{applicationDraft.data.workflowStatus.replaceAll("_", " ")}</span></div>
           <p className="form-hint">Generated only from your saved candidate profile and reviewed resume entries. Check every claim and personalize the wording. Nothing is submitted or sent.</p>
           <label>Resume tailoring summary
             <textarea rows={5} value={applicationDraft.data.resumeSummary} onChange={event => updateApplicationDraft("resumeSummary", event.target.value)} placeholder="No matching resume evidence was found. Add only accurate details." />
@@ -1191,7 +1212,8 @@ export function App() {
           {!!applicationDraft.data.reviewNotes.length && <div><strong>Review notes</strong><ul>{applicationDraft.data.reviewNotes.map(note => <li key={note}>{note}</li>)}</ul></div>}
           <div className="draft-actions">
             <button type="button" disabled={draftBusy === job.id} onClick={() => void saveApplicationDraft()}>{draftBusy === job.id ? "Saving…" : "Save edits"}</button>
-            <button type="button" className="secondary" disabled={draftBusy === job.id || applicationDraft.data.status === "REVIEWED"} onClick={() => void markApplicationDraftReviewed()}>Save & mark reviewed</button>
+            <button type="button" className="secondary" disabled={draftBusy === job.id || applicationDraft.data.workflowStatus === "READY_FOR_REVIEW" || applicationDraft.data.workflowStatus === "APPROVED"} onClick={() => void markApplicationDraftReviewed()}>Save & ready for review</button>
+            <button type="button" disabled={draftBusy === job.id || applicationDraft.data.workflowStatus !== "READY_FOR_REVIEW"} onClick={() => void approveApplicationDraft()}>Approve application draft</button>
           </div>
           {draftMessage && <p className="resume-message" role="status">{draftMessage}</p>}
           <p className="fit-disclaimer">Reviewed means you approved this text for your own manual use only. It is not an application submission or authorization for automated contact.</p>
