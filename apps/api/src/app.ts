@@ -539,6 +539,8 @@ function serializeApplicationDraft(draft: {
     coverLetter: draft.coverLetter,
     reviewNotes: readJsonList(draft.reviewNotesJson),
     status: draft.status,
+    workflowStatus: draft.workflowStatus,
+    approvedAt: draft.approvedAt,
     reviewedAt: draft.reviewedAt,
     createdAt: draft.createdAt,
     updatedAt: draft.updatedAt
@@ -648,14 +650,41 @@ app.post("/api/jobs/:id/application-draft/review", requireAuth, async (req, res)
     }
     const saved = await prisma.userApplicationDraft.update({
       where: { userId_jobId: { userId: res.locals.userId, jobId: String(req.params.id) } },
-      data: { status: "REVIEWED", reviewedAt: new Date() }
+      data: { status: "REVIEWED", workflowStatus: "READY_FOR_REVIEW", approvedAt: null, reviewedAt: new Date() }
     });
-    res.json({ data: serializeApplicationDraft(saved), message: "Marked reviewed for manual use only. No application was submitted." });
+    res.json({ data: serializeApplicationDraft(saved), message: "Draft is ready for your final approval. Nothing has been submitted." });
   } catch (error) {
     res.status(500).json({ error: "Unable to mark application draft reviewed", detail: error instanceof Error ? error.message : "Unknown error" });
   }
 });
 
+
+app.post("/api/jobs/:id/application-draft/approve", requireAuth, async (req, res) => {
+  if (req.body?.approved !== true) {
+    res.status(400).json({ error: "Explicit approval is required." });
+    return;
+  }
+  try {
+    const existing = await prisma.userApplicationDraft.findFirst({
+      where: { userId: res.locals.userId, jobId: String(req.params.id) }
+    });
+    if (!existing) {
+      res.status(404).json({ error: "Application draft not found." });
+      return;
+    }
+    if (existing.workflowStatus !== "READY_FOR_REVIEW") {
+      res.status(409).json({ error: "Save and mark the draft ready for review before approving it." });
+      return;
+    }
+    const saved = await prisma.userApplicationDraft.update({
+      where: { userId_jobId: { userId: res.locals.userId, jobId: String(req.params.id) } },
+      data: { workflowStatus: "APPROVED", approvedAt: new Date() }
+    });
+    res.json({ data: serializeApplicationDraft(saved), message: "Approval recorded. No application has been submitted." });
+  } catch (error) {
+    res.status(500).json({ error: "Unable to record approval", detail: error instanceof Error ? error.message : "Unknown error" });
+  }
+});
 
 const APPLICATION_STATUSES = ["SAVED", "PREPARING", "APPLIED", "INTERVIEW", "OFFER", "REJECTED", "WITHDRAWN"] as const;
 type ApplicationStatus = typeof APPLICATION_STATUSES[number];
