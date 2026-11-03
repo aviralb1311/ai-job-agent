@@ -1,5 +1,5 @@
 import express from "express";
-import { register, login, logout, currentSession, requireAuth } from "./auth.js";
+import { register, login, logout, currentSession, requireAuth, requireAdmin } from "./auth.js";
 import cors from "cors";
 import { config } from "./config.js";
 import { prisma } from "./db.js";
@@ -830,7 +830,7 @@ app.get("/api/sources", async (_req, res) => {
   }
 });
 
-app.post("/api/sources", async (req, res) => {
+app.post("/api/sources", requireAdmin, async (req, res) => {
   const provider = typeof req.body?.provider === "string" ? req.body.provider.trim().toUpperCase() : "";
   const boardId = typeof req.body?.boardId === "string" ? req.body.boardId.trim() : "";
   const displayName = typeof req.body?.displayName === "string" ? req.body.displayName.trim() : "";
@@ -865,7 +865,7 @@ app.post("/api/sources", async (req, res) => {
   }
 });
 
-app.post("/api/sources/:id/test", async (req, res) => {
+app.post("/api/sources/:id/test", requireAdmin, async (req, res) => {
   try {
     const source = await prisma.jobSource.findUnique({ where: { id: req.params.id } });
     if (!source) {
@@ -883,7 +883,7 @@ app.post("/api/sources/:id/test", async (req, res) => {
   }
 });
 
-app.patch("/api/sources/:id", async (req, res) => {
+app.patch("/api/sources/:id", requireAdmin, async (req, res) => {
   if (typeof req.body?.enabled !== "boolean") {
     res.status(400).json({ error: "enabled must be a boolean" });
     return;
@@ -902,7 +902,7 @@ app.patch("/api/sources/:id", async (req, res) => {
   }
 });
 
-app.delete("/api/sources/:id", async (req, res) => {
+app.delete("/api/sources/:id", requireAdmin, async (req, res) => {
   try {
     await prisma.jobSource.delete({ where: { id: req.params.id } });
     res.status(204).send();
@@ -938,7 +938,7 @@ app.get("/api/sync-runs", async (req, res) => {
   }
 });
 
-app.post("/api/sources/:id/sync", async (req, res) => {
+app.post("/api/sources/:id/sync", requireAdmin, async (req, res) => {
   try {
     const source = await prisma.jobSource.findUnique({ where: { id: req.params.id } });
     if (!source) {
@@ -959,7 +959,7 @@ app.post("/api/sources/:id/sync", async (req, res) => {
   }
 });
 
-app.post("/api/jobs/sync", async (_req, res) => {
+app.post("/api/jobs/sync", requireAdmin, async (_req, res) => {
   try {
     const result = await syncJobs();
     res.json(result);
