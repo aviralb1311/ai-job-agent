@@ -60,6 +60,34 @@ describe("job sync SQLite integration", () => {
     await prisma.$disconnect();
   });
 
+  it("records per-board sync outcomes and exposes diagnostic history", async () => {
+    await prisma.jobSource.create({
+      data: { provider: "GREENHOUSE", boardId: "history-board", displayName: "History Board" }
+    });
+    greenhouseFetch.mockRejectedValueOnce(new Error("provider unavailable"));
+    const result = await syncJobs();
+    expect(result.errors).toEqual(["GREENHOUSE/history-board: provider unavailable"]);
+
+    const server = app.listen(0);
+    try {
+      await new Promise<void>(resolve => server.once("listening", resolve));
+      const address = server.address();
+      if (!address || typeof address === "string") throw new Error("Test server did not bind to a TCP port");
+      const response = await fetch(`http://127.0.0.1:${address.port}/api/sync-runs?limit=5&provider=GREENHOUSE&boardId=history-board`);
+      const body = await response.json() as { data: Array<{ provider: string; boardId: string; status: string; fetched: number; errors: string[]; durationMs: number; completedAt: string }> };
+      expect(response.status).toBe(200);
+      expect(body.data).toHaveLength(1);
+      expect(body.data[0]).toMatchObject({
+        provider: "GREENHOUSE", boardId: "history-board", status: "FAILED", fetched: 0,
+        errors: ["GREENHOUSE/history-board: provider unavailable"]
+      });
+      expect(body.data[0].durationMs).toBeGreaterThanOrEqual(0);
+      expect(body.data[0].completedAt).toBeTruthy();
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+    }
+  });
+
   it("reports per-provider stored listing freshness without claiming live connectivity", async () => {
     await prisma.jobSource.create({
       data: { provider: "GREENHOUSE", boardId: "health-board", displayName: "Health Board" }
