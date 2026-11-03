@@ -496,4 +496,45 @@ describe("job sync SQLite integration", () => {
     }
   });
 
+
+  it("returns full job description and verification metadata for the detail viewer", async () => {
+    const verifiedAt = new Date("2026-11-02T09:30:00.000Z");
+    const job = await prisma.job.create({
+      data: {
+        source: "GREENHOUSE",
+        externalId: "job-details-viewer-001",
+        title: "Backend Engineer",
+        company: "Example Systems",
+        location: "Remote - India",
+        description: "<p>Build reliable APIs.</p><ul><li>Node.js</li><li>PostgreSQL</li></ul>",
+        employmentType: "FULL_TIME",
+        applicationUrl: "https://jobs.example.test/details",
+        canonicalUrl: "https://jobs.example.test/details",
+        publishedAt: new Date("2026-11-01T08:00:00.000Z"),
+        lastVerifiedAt: verifiedAt,
+        status: "ACTIVE",
+        skillsJson: JSON.stringify(["Node.js", "PostgreSQL"])
+      }
+    });
+    const server = app.listen(0);
+    try {
+      await new Promise<void>(resolve => server.once("listening", resolve));
+      const address = server.address();
+      if (!address || typeof address === "string") throw new Error("Test server did not bind to a TCP port");
+      const response = await fetch("http://127.0.0.1:" + address.port + "/api/jobs?limit=10");
+      const body = await response.json() as { data: Array<{ id: string; description: string; employmentType: string; lastVerifiedAt: string | null; discoveredAt: string }> };
+      expect(response.status).toBe(200);
+      const result = body.data.find(item => item.id === job.id);
+      expect(result).toMatchObject({
+        id: job.id,
+        description: "<p>Build reliable APIs.</p><ul><li>Node.js</li><li>PostgreSQL</li></ul>",
+        employmentType: "FULL_TIME",
+        lastVerifiedAt: verifiedAt.toISOString()
+      });
+      expect(result?.discoveredAt).toBeTruthy();
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+    }
+  });
+
 });
