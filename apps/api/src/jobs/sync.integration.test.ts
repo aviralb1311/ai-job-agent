@@ -685,4 +685,24 @@ describe("job sync SQLite integration", () => {
     }
   });
 
+
+  it("does not refresh verification timestamps after a partial board snapshot", async () => {
+    await prisma.jobSource.create({ data: { provider: "GREENHOUSE", boardId: "partial-board" } });
+    greenhouseFetch.mockResolvedValueOnce([greenhouseJob]);
+    await syncJobs();
+    const before = await prisma.job.findFirst({ where: { externalId: greenhouseJob.id } });
+    expect(before?.lastVerifiedAt).toBeTruthy();
+
+    await new Promise(resolve => setTimeout(resolve, 5));
+    greenhouseFetch.mockResolvedValueOnce([
+      greenhouseJob,
+      { ...greenhouseJob, id: "invalid-job", title: "", url: "https://jobs.example.test/invalid" }
+    ]);
+    const result = await syncJobs();
+    const after = await prisma.job.findFirst({ where: { externalId: greenhouseJob.id } });
+
+    expect(result.errors).toHaveLength(1);
+    expect(after?.lastVerifiedAt?.getTime()).toBe(before?.lastVerifiedAt?.getTime());
+  });
+
 });
