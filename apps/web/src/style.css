@@ -25,3 +25,12 @@
 
 /* Phase 1.17: saved job shortlist */
 .job-actions{flex-wrap:wrap}.job-actions button[aria-label]{min-width:104px}.job-actions button[aria-label="Remove from saved jobs"]{color:#315b92;background:#eef4fc;border-color:#d7e4f5}.toolbar-actions{flex-wrap:wrap}
+
+
+/* Phase 1.18: advanced job search and filtering */
+.advanced-filters{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:11px;align-items:end;margin:-18px 0 24px;padding:18px;background:#fff;border:1px solid #e5eaf2;border-radius:14px}
+.advanced-filters label{display:grid;gap:6px;font-size:11px;font-weight:750;color:#536078;min-width:0}
+.advanced-filters input,.advanced-filters select{width:100%;min-width:0;padding:10px 11px;border:1px solid #d7dfed;border-radius:8px;background:#fff;color:#172033;font:inherit;font-size:12px}
+.advanced-filters button{min-height:38px;padding:9px 12px;font-size:11px;white-space:nowrap}
+@media(max-width:1050px){.advanced-filters{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:650px){.advanced-filters{grid-template-columns:1fr;margin-top:-12px;padding:14px}.advanced-filters button{width:100%}}
