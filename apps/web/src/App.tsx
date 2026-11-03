@@ -902,7 +902,6 @@ export function App() {
           <button className="small-action secondary" disabled={!item.enabled || syncingSourceId !== null} onClick={() => void syncOneSource(item)}>{syncingSourceId === item.id ? "Revalidating…" : item.health && item.health.expiredListingCount + item.health.staleListingCount > 0 ? "Revalidate board" : "Sync now"}</button>
           <button className="small-action secondary" onClick={() => void toggleSource(item)}>{item.enabled ? "Disable" : "Enable"}</button>
           <button className="small-action danger-action" onClick={() => void removeSource(item)}>Remove</button>
-          </details>}
       </article>)}
         {!sources.length && !sourcesLoading && <div className="source-empty">No database-managed boards yet. Add your first public career board above.</div>}
       </div>
@@ -922,7 +921,7 @@ export function App() {
             <p>{item.description}</p>
             <div className="catalog-card-actions">
               <a href={item.careersUrl} target="_blank" rel="noreferrer">Career board ↗</a>
-              <button className="small-action" disabled={savingSource || configured} onClick={() => void addCatalogSource(item)}>{configured ? "Added" : "Add & validate"}</button>
+              {user?.role === "ADMIN" && <button className="small-action" disabled={savingSource || configured} onClick={() => void addCatalogSource(item)}>{configured ? "Added" : "Add & validate"}</button>}
             </div>
           </article>;
         })}
