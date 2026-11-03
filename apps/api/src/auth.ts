@@ -180,3 +180,17 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction): v
     next();
   });
 }
+
+
+export async function optionalAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const found = await findSession(req);
+    if (found) {
+      res.locals.userId = found.user.id;
+      res.locals.userRole = found.user.role;
+    }
+    next();
+  } catch {
+    next();
+  }
+}
