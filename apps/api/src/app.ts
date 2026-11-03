@@ -1,5 +1,5 @@
 import express from "express";
-import { register, login, logout, currentSession, requireAuth, requireAdmin } from "./auth.js";
+import { register, login, logout, currentSession, requireAuth, requireAdmin, optionalAuth } from "./auth.js";
 import cors from "cors";
 import { config } from "./config.js";
 import { prisma } from "./db.js";
@@ -371,7 +371,7 @@ app.delete("/api/jobs/:id/save", requireAuth, async (req, res) => {
   }
 });
 
-app.get("/api/jobs", async (req, res) => {
+app.get("/api/jobs", optionalAuth, async (req, res) => {
   try {
     const q = String(req.query.q ?? "").trim();
     const location = String(req.query.location ?? "").trim();
