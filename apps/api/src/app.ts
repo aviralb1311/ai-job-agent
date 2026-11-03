@@ -371,12 +371,14 @@ app.get("/api/jobs", async (req, res) => {
     const employmentType = String(req.query.employmentType ?? "").trim().toUpperCase();
     const workMode = String(req.query.workMode ?? "ANY").trim().toUpperCase();
     const sort = String(req.query.sort ?? "NEWEST").trim().toUpperCase();
+    const listingStatus = String(req.query.listingStatus ?? "OPEN").trim().toUpperCase();
     const requiredSkills = String(req.query.skills ?? "").split(",").map(skill => skill.trim()).filter(Boolean);
     const parsedLimit = Number(req.query.limit ?? 50);
     const take = Number.isFinite(parsedLimit) ? Math.min(Math.max(Math.floor(parsedLimit), 1), 100) : 50;
     const employmentTypes = ["FULL_TIME", "PART_TIME", "INTERNSHIP", "CONTRACT", "UNKNOWN"];
     const workModes = ["ANY", "REMOTE", "HYBRID", "ONSITE", "UNKNOWN"];
     const sortOptions = ["NEWEST", "MATCH", "RELEVANCE"];
+    const listingStatuses = ["OPEN", "INACTIVE", "ALL"];
 
     if (employmentType && !employmentTypes.includes(employmentType)) {
       res.status(400).json({ error: "employmentType must be FULL_TIME, PART_TIME, INTERNSHIP, CONTRACT or UNKNOWN." });
@@ -384,6 +386,10 @@ app.get("/api/jobs", async (req, res) => {
     }
     if (!workModes.includes(workMode)) {
       res.status(400).json({ error: "workMode must be ANY, REMOTE, HYBRID, ONSITE or UNKNOWN." });
+      return;
+    }
+    if (!listingStatuses.includes(listingStatus)) {
+      res.status(400).json({ error: "listingStatus must be OPEN, INACTIVE or ALL." });
       return;
     }
     if (!sortOptions.includes(sort)) {
@@ -401,7 +407,8 @@ app.get("/api/jobs", async (req, res) => {
         location ? { location: { contains: location } } : {},
         company ? { company: { contains: company } } : {},
         source ? { source } : {},
-        employmentType ? { employmentType } : {}
+        employmentType ? { employmentType } : {},
+        listingStatus === "OPEN" ? { status: { not: "INACTIVE" } } : listingStatus === "INACTIVE" ? { status: "INACTIVE" } : {}
       ]
     };
 
@@ -450,7 +457,7 @@ app.get("/api/jobs", async (req, res) => {
       count: data.length,
       total,
       profileConfigured: Boolean(profile.skills.length || profile.preferredRoles.length || profile.locations.length || profile.remotePreference !== "ANY"),
-      filters: { employmentType: employmentType || null, workMode, company: company || null, skills: requiredSkills, sort }
+      filters: { employmentType: employmentType || null, workMode, company: company || null, skills: requiredSkills, sort, listingStatus }
     });
   } catch (error) {
     res.status(500).json({
