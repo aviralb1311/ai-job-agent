@@ -69,6 +69,7 @@ model Job {
   skillsJson      String   @default("[]")
   applicationDraft ApplicationDraft?
   applicationTracking ApplicationTracking?
+  savedEntries SavedJob[]
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   @@unique([source, externalId])
@@ -83,6 +84,7 @@ model SavedJob {
   userId    String
   jobId     String
   createdAt DateTime @default(now())
+  job       Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
   @@unique([userId, jobId])
   @@index([userId])
 }

@@ -312,4 +312,55 @@ describe("job sync SQLite integration", () => {
     }
   });
 
+
+  it("saves, lists and removes shortlisted jobs idempotently", async () => {
+    const job = await prisma.job.create({
+      data: {
+        source: "GREENHOUSE",
+        externalId: "saved-job-1",
+        title: "Platform Engineer",
+        company: "Example Co",
+        location: "Remote",
+        description: "Build and operate backend systems",
+        applicationUrl: "https://jobs.example.test/platform",
+        canonicalUrl: "https://jobs.example.test/platform",
+        category: "BACKEND",
+        skillsJson: JSON.stringify(["node.js", "postgresql"])
+      }
+    });
+    const server = app.listen(0);
+    try {
+      await new Promise<void>(resolve => server.once("listening", resolve));
+      const address = server.address();
+      if (!address || typeof address === "string") throw new Error("Test server did not bind to a TCP port");
+      const base = "http://127.0.0.1:" + address.port;
+      const jobEndpoint = base + "/api/jobs/" + job.id + "/save";
+
+      const initialJobsResponse = await fetch(base + "/api/jobs");
+      const initialJobs = await initialJobsResponse.json() as { data: Array<{ id: string; isSaved: boolean }> };
+      expect(initialJobs.data.find(item => item.id === job.id)?.isSaved).toBe(false);
+
+      const saveResponse = await fetch(jobEndpoint, { method: "POST" });
+      const saved = await saveResponse.json() as { data?: { jobId: string; isSaved: boolean } };
+      expect(saveResponse.status).toBe(201);
+      expect(saved.data).toMatchObject({ jobId: job.id, isSaved: true });
+
+      const repeatedSave = await fetch(jobEndpoint, { method: "POST" });
+      expect(repeatedSave.status).toBe(201);
+      expect(await prisma.savedJob.count({ where: { jobId: job.id, userId: "local" } })).toBe(1);
+
+      const savedJobsResponse = await fetch(base + "/api/saved-jobs");
+      const savedJobs = await savedJobsResponse.json() as { data?: Array<{ id: string; title: string }>; count: number };
+      expect(savedJobsResponse.status).toBe(200);
+      expect(savedJobs.count).toBe(1);
+      expect(savedJobs.data?.[0]).toMatchObject({ id: job.id, title: "Platform Engineer" });
+
+      const removeResponse = await fetch(jobEndpoint, { method: "DELETE" });
+      expect(removeResponse.status).toBe(200);
+      expect(await prisma.savedJob.count({ where: { jobId: job.id, userId: "local" } })).toBe(0);
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+    }
+  });
+
 });

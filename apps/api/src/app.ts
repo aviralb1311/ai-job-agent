@@ -163,6 +163,68 @@ app.get("/api/profile/resume", async (_req, res) => {
   }
 });
 
+
+const LOCAL_SAVED_JOBS_USER_ID = "local";
+
+app.get("/api/saved-jobs", async (_req, res) => {
+  try {
+    const records = await prisma.savedJob.findMany({
+      where: { userId: LOCAL_SAVED_JOBS_USER_ID },
+      orderBy: { createdAt: "desc" },
+      include: { job: true }
+    });
+    const profileRow = await prisma.candidateProfile.findUnique({ where: { id: "default" } });
+    const profile = parseProfile(profileRow);
+    const data = records.map(record => {
+      const job = record.job;
+      return {
+        ...job,
+        savedAt: record.createdAt,
+        skills: readJsonList(job.skillsJson),
+        match: scoreJobMatch({
+          title: job.title, location: job.location, category: job.category,
+          skills: readJsonList(job.skillsJson)
+        }, profile)
+      };
+    });
+    res.json({ data, count: data.length });
+  } catch (error) {
+    res.status(500).json({ error: "Unable to retrieve saved jobs", detail: error instanceof Error ? error.message : "Unknown error" });
+  }
+});
+
+app.post("/api/jobs/:id/save", async (req, res) => {
+  try {
+    const job = await prisma.job.findUnique({ where: { id: req.params.id }, select: { id: true } });
+    if (!job) {
+      res.status(404).json({ error: "Job listing not found" });
+      return;
+    }
+    const saved = await prisma.savedJob.upsert({
+      where: { userId_jobId: { userId: LOCAL_SAVED_JOBS_USER_ID, jobId: job.id } },
+      create: { userId: LOCAL_SAVED_JOBS_USER_ID, jobId: job.id },
+      update: {}
+    });
+    res.status(201).json({ data: { jobId: saved.jobId, savedAt: saved.createdAt, isSaved: true } });
+  } catch (error) {
+    res.status(500).json({ error: "Unable to save job", detail: error instanceof Error ? error.message : "Unknown error" });
+  }
+});
+
+app.delete("/api/jobs/:id/save", async (req, res) => {
+  try {
+    const job = await prisma.job.findUnique({ where: { id: req.params.id }, select: { id: true } });
+    if (!job) {
+      res.status(404).json({ error: "Job listing not found" });
+      return;
+    }
+    await prisma.savedJob.deleteMany({ where: { userId: LOCAL_SAVED_JOBS_USER_ID, jobId: job.id } });
+    res.json({ data: { jobId: job.id, isSaved: false } });
+  } catch (error) {
+    res.status(500).json({ error: "Unable to remove saved job", detail: error instanceof Error ? error.message : "Unknown error" });
+  }
+});
+
 app.get("/api/jobs", async (req, res) => {
   try {
     const q = String(req.query.q ?? "").trim();
@@ -179,14 +241,19 @@ app.get("/api/jobs", async (req, res) => {
       ]
     };
 
-    const [jobs, total] = await Promise.all([
+    const [jobs, total, savedRecords] = await Promise.all([
       prisma.job.findMany({
         where,
         orderBy: [{ publishedAt: "desc" }, { discoveredAt: "desc" }],
         take
       }),
-      prisma.job.count({ where })
+      prisma.job.count({ where }),
+      prisma.savedJob.findMany({
+        where: { userId: LOCAL_SAVED_JOBS_USER_ID },
+        select: { jobId: true }
+      })
     ]);
+    const savedJobIds = new Set(savedRecords.map(record => record.jobId));
 
     const profileRow = await prisma.candidateProfile.findUnique({ where: { id: "default" } });
     const profile = parseProfile(profileRow);
@@ -199,6 +266,7 @@ app.get("/api/jobs", async (req, res) => {
       return {
         ...job,
         skills,
+        isSaved: savedJobIds.has(job.id),
         match: scoreJobMatch({ title: job.title, location: job.location, category: job.category, skills }, profile)
       };
     });
