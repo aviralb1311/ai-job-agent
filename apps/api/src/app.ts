@@ -200,7 +200,7 @@ app.put("/api/profile", requireAuth, async (req, res) => {
   }
   const clean = (items: string[]) => [...new Set(items.map(item => item.trim()))];
   try {
-    const contact = Object.fromEntries(CONTACT_FIELDS.map(field => [field, typeof body[field] === "string" ? body[field].trim() : ""]])) as Record<ContactField, string>;
+    const contact = Object.fromEntries(CONTACT_FIELDS.map(field => [field, typeof body[field] === "string" ? body[field].trim() : ""])) as Record<ContactField, string>;
     const data = {
       skillsJson: JSON.stringify(clean(body.skills)),
       preferredRoles: JSON.stringify(clean(body.preferredRoles)),
