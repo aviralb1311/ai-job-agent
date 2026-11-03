@@ -124,7 +124,9 @@ async function runSync(target?: { provider: string; boardId: string }): Promise<
               sourceBoardId: source.boardId,
               publishedAt: normalized.publishedAt ? new Date(normalized.publishedAt) : null,
               canonicalUrl,
-              lastVerifiedAt: new Date(),
+              // Keep the previous verification timestamp until the entire board
+              // snapshot has been processed successfully.
+              lastVerifiedAt: existing?.lastVerifiedAt ?? null,
               status: "ACTIVE"
             };
 
@@ -151,6 +153,18 @@ async function runSync(target?: { provider: string; boardId: string }): Promise<
     }
 
     const status = sourceFetchFailed ? "FAILED" : sourceErrors.length ? "PARTIAL" : "SUCCESS";
+    // Verification is board-snapshot scoped: only stamp returned listings after every
+    // fetched record has been processed. Partial runs must not make jobs look fresh.
+    if (status === "SUCCESS" && fetched > 0 && connector && seenExternalIds.size > 0) {
+      await prisma.job.updateMany({
+        where: {
+          source: connector.provider,
+          sourceBoardId: source.boardId,
+          externalId: { in: [...seenExternalIds] }
+        },
+        data: { lastVerifiedAt: new Date() }
+      });
+    }
     // Only retire missing listings after a non-empty, fully processed board snapshot.
     // Empty feeds and partial/failed runs are not strong enough evidence to deactivate jobs.
     if (status === "SUCCESS" && fetched > 0 && connector && seenExternalIds.size > 0) {

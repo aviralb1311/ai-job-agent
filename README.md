@@ -204,3 +204,12 @@ The scheduler runs inside the API process, uses the existing sync service and pe
 - Sync history records the number of listings marked inactive in each run. Historical jobs and their application drafts, saved entries, and tracking records are retained.
 - This is feed-based lifecycle inference, not authoritative confirmation from an employer. Always verify the original company listing before applying.
 - After pulling this phase, run `npm run db:generate` and `npm run db:push` from the repository root to add the deactivation count to sync history.
+
+
+## Job expiry and revalidation (Phase 1.26)
+
+- Each returned job includes a derived revalidation state based on its last successful provider verification: **Fresh** (within 7 days), **Stale** (more than 7 and up to 30 days), **Revalidation overdue** (more than 30 days), or **Not yet verified** (no verification timestamp).
+- These are age-based reminders, not claims that an employer closed or expired a role. A job is not automatically removed or marked inactive because its verification timestamp is old.
+- The dashboard displays the state on each job and adds stale/overdue counts to each configured source. Use **Revalidate board** to fetch the latest public board snapshot through its existing provider connector.
+- Only a successful, non-empty, fully processed source sync updates verification timestamps and listing lifecycle state. Empty, failed, or partial syncs do not refresh every job's timestamp or deactivate missing listings.
+- The existing inactive state remains reserved for postings absent from a complete, non-empty provider snapshot (Phase 1.25). Always open the employer's original listing before applying.
