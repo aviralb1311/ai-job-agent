@@ -751,6 +751,11 @@ export function App() {
       <label>Company
         <input value={companyFilter} onChange={event => setCompanyFilter(event.target.value)} placeholder="Company name" />
       </label>
+      <label>Source
+        <select value={source} onChange={event => setSource(event.target.value)}>
+          <option value="">All sources</option><option value="GREENHOUSE">Greenhouse</option><option value="LEVER">Lever</option><option value="ASHBY">Ashby</option>
+        </select>
+      </label>
       <label>Employment type
         <select value={employmentType} onChange={event => setEmploymentType(event.target.value)}>
           <option value="">All job types</option><option value="FULL_TIME">Full-time</option><option value="PART_TIME">Part-time</option><option value="INTERNSHIP">Internship</option><option value="CONTRACT">Contract</option><option value="UNKNOWN">Unspecified</option>
