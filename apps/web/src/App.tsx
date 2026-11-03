@@ -138,6 +138,9 @@ export function App() {
   const [remotePreference, setRemotePreference] = useState<CandidateProfile["remotePreference"]>("ANY");
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileMessage, setProfileMessage] = useState("");
+  const [extensionPairingCode, setExtensionPairingCode] = useState("");
+  const [extensionPairingBusy, setExtensionPairingBusy] = useState(false);
+  const [extensionPairingMessage, setExtensionPairingMessage] = useState("");
   const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [resumeDraft, setResumeDraft] = useState<ResumeDraft | null>(null);
   const [resumeBusy, setResumeBusy] = useState(false);
@@ -395,6 +398,23 @@ export function App() {
     }
   }
 
+
+  async function createExtensionPairingCode() {
+    setExtensionPairingBusy(true);
+    setExtensionPairingCode("");
+    setExtensionPairingMessage("");
+    try {
+      const response = await apiFetch(`${API}/api/extension/pairing-code`, { method: "POST" });
+      const body = await response.json() as { data?: { code: string; expiresInSeconds: number }; error?: string };
+      if (!response.ok || !body.data) throw new Error(body.error || "Could not create pairing code");
+      setExtensionPairingCode(body.data.code);
+      setExtensionPairingMessage("Enter this one-time code in the AI Job Agent Chrome extension within 5 minutes.");
+    } catch (e) {
+      setExtensionPairingMessage(e instanceof Error ? e.message : "Could not create pairing code");
+    } finally {
+      setExtensionPairingBusy(false);
+    }
+  }
 
   async function analyzeFit(jobId: string) {
     if (analysis?.jobId === jobId) {
@@ -918,6 +938,13 @@ export function App() {
           <input type="url" value={contact.portfolioUrl} onChange={e => setContact({ ...contact, portfolioUrl: e.target.value })} placeholder="https://your-portfolio.example" />
         </label>
         <p className="form-hint">Account email: {profile.email || "Not available"}</p>
+        <div className="extension-pairing">
+          <h4>Connect Chrome extension</h4>
+          <p className="form-hint">Generate a single-use code to connect the extension to this account. It expires after 5 minutes.</p>
+          <button type="button" disabled={extensionPairingBusy} onClick={() => void createExtensionPairingCode()}>{extensionPairingBusy ? "Generating…" : "Generate extension pairing code"}</button>
+          {extensionPairingCode && <p><strong>One-time code: {extensionPairingCode}</strong></p>}
+          {extensionPairingMessage && <p className="profile-message" role="status">{extensionPairingMessage}</p>}
+        </div>
         <h4>Job preferences</h4>
         <label>Skills (comma-separated)
           <input value={profileSkills} onChange={e => setProfileSkills(e.target.value)} placeholder="Node.js, PostgreSQL, Docker, React" />
