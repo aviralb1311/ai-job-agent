@@ -696,7 +696,7 @@ describe("job sync SQLite integration", () => {
     await new Promise(resolve => setTimeout(resolve, 5));
     greenhouseFetch.mockResolvedValueOnce([
       greenhouseJob,
-      { ...greenhouseJob, id: "invalid-job", title: "", url: "https://jobs.example.test/invalid" }
+      { ...greenhouseJob, id: "invalid-job", company: undefined as unknown as string, url: "https://jobs.example.test/invalid" }
     ]);
     const result = await syncJobs();
     const after = await prisma.job.findFirst({ where: { externalId: greenhouseJob.id } });
