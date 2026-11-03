@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { FollowUpQueue } from "./FollowUpQueue.js";
 import type { FormEvent } from "react";
 
 type Job = {
@@ -1020,6 +1021,8 @@ export function App() {
         {applicationRecords.slice(0, 5).map(item => <div key={item.jobId}><span>{item.job.title} · {item.job.company}</span><span className="tracker-status">{item.status.replaceAll("_", " ")}</span>{item.followUpAt && <small>Follow up: {new Date(item.followUpAt + "T00:00:00").toLocaleDateString()}</small>}</div>)}
       </div>}
     </section>
+
+    <FollowUpQueue />
 
     {error && <div className="error" role="alert">{error}</div>}
 
