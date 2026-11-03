@@ -1,14 +1,18 @@
 {
   "manifest_version": 3,
   "name": "AI Job Agent - Application Helper",
-  "version": "0.1.0",
-  "description": "Recognises supported Greenhouse application forms. Profile autofill will be added in a later step.",
+  "version": "0.1.1",
+  "description": "Recognises supported Greenhouse application forms.",
   "permissions": [],
   "host_permissions": [
     "https://boards.greenhouse.io/*",
     "https://job-boards.greenhouse.io/*",
     "https://*.greenhouse.io/*"
   ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "AI Job Agent"
+  },
   "content_scripts": [
     {
       "matches": [
@@ -16,7 +20,9 @@
         "https://job-boards.greenhouse.io/*",
         "https://*.greenhouse.io/*"
       ],
-      "js": ["greenhouse.js"],
+      "js": [
+        "greenhouse.js"
+      ],
       "run_at": "document_idle"
     }
   ]
