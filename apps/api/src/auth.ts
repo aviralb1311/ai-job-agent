@@ -99,13 +99,17 @@ export async function login(req: Request, res: Response): Promise<void> {
     res.status(400).json({ error: "Enter a valid email and password." });
     return;
   }
-  const user = await prisma.user.findUnique({ where: { email: parsed.data.email.toLowerCase() } });
-  if (!user || !(await verifyPassword(parsed.data.password, user.passwordHash))) {
-    res.status(401).json({ error: "Email or password is incorrect." });
-    return;
+  try {
+    const user = await prisma.user.findUnique({ where: { email: parsed.data.email.toLowerCase() } });
+    if (!user || !(await verifyPassword(parsed.data.password, user.passwordHash))) {
+      res.status(401).json({ error: "Email or password is incorrect." });
+      return;
+    }
+    await issueSession(user.id, res);
+    res.json({ data: { user: { id: user.id, email: user.email, role: user.role } } });
+  } catch {
+    res.status(500).json({ error: "Unable to sign in." });
   }
-  await issueSession(user.id, res);
-  res.json({ data: { user: { id: user.id, email: user.email, role: user.role } } });
 }
 
 async function issueSession(userId: string, res: Response): Promise<void> {
@@ -122,21 +126,29 @@ async function issueSession(userId: string, res: Response): Promise<void> {
 }
 
 export async function logout(req: Request, res: Response): Promise<void> {
-  const token = readCookie(req, COOKIE_NAME);
-  if (token) {
-    await prisma.session.deleteMany({ where: { tokenHash: tokenDigest(token) } });
+  try {
+    const token = readCookie(req, COOKIE_NAME);
+    if (token) {
+      await prisma.session.deleteMany({ where: { tokenHash: tokenDigest(token) } });
+    }
+    clearSessionCookie(res);
+    res.json({ data: { loggedOut: true } });
+  } catch {
+    res.status(500).json({ error: "Unable to sign out." });
   }
-  clearSessionCookie(res);
-  res.json({ data: { loggedOut: true } });
 }
 
 export async function currentSession(req: Request, res: Response): Promise<void> {
-  const found = await findSession(req);
-  if (!found) {
-    res.status(401).json({ error: "Authentication required." });
-    return;
+  try {
+    const found = await findSession(req);
+    if (!found) {
+      res.status(401).json({ error: "Authentication required." });
+      return;
+    }
+    res.json({ data: { user: found.user } });
+  } catch {
+    res.status(500).json({ error: "Unable to validate session." });
   }
-  res.json({ data: { user: found.user } });
 }
 
 export async function requireAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
