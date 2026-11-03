@@ -53,6 +53,7 @@ model CandidateProfile {
 model Job {
   id              String   @id @default(cuid())
   source          String
+  sourceBoardId   String?
   externalId      String
   title           String
   company         String
