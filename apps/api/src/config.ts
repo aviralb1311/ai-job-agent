@@ -7,6 +7,7 @@ const schema = z.object({
   CORS_ORIGIN: z.string().default("http://localhost:5173"),
   AUTH_COOKIE_SECURE: z.enum(["true", "false"]).default("false").transform(value => value === "true"),
   SESSION_TTL_DAYS: z.coerce.number().int().min(1).max(30).default(7),
+  ADMIN_EMAILS: z.string().default(""),
   GREENHOUSE_BOARDS: z.string().default(""),
   LEVER_SITES: z.string().default(""),
   ASHBY_BOARDS: z.string().default(""),
