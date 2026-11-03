@@ -255,4 +255,61 @@ describe("job sync SQLite integration", () => {
     }
   });
 
+
+  it("persists application progress, notes and follow-up dates in the tracker", async () => {
+    const job = await prisma.job.create({
+      data: {
+        source: "GREENHOUSE",
+        externalId: "tracking-1",
+        title: "Software Engineer",
+        company: "Example Co",
+        location: "Remote",
+        description: "Build software",
+        applicationUrl: "https://jobs.example.test/software",
+        canonicalUrl: "https://jobs.example.test/software"
+      }
+    });
+    const server = app.listen(0);
+    try {
+      await new Promise<void>(resolve => server.once("listening", resolve));
+      const address = server.address();
+      if (!address || typeof address === "string") throw new Error("Test server did not bind to a TCP port");
+      const base = "http://127.0.0.1:" + address.port;
+      const endpoint = base + "/api/jobs/" + job.id + "/application-tracking";
+      const saveResponse = await fetch(endpoint, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: "INTERVIEW",
+          notes: "Technical round scheduled; revise system design.",
+          appliedAt: "2026-11-01",
+          followUpAt: "2026-11-08"
+        })
+      });
+      const saved = await saveResponse.json() as { data?: { status: string; notes: string; appliedAt: string | null; followUpAt: string | null } };
+      expect(saveResponse.status).toBe(200);
+      expect(saved.data).toMatchObject({
+        status: "INTERVIEW",
+        notes: "Technical round scheduled; revise system design.",
+        appliedAt: "2026-11-01",
+        followUpAt: "2026-11-08"
+      });
+
+      const listResponse = await fetch(base + "/api/applications?status=INTERVIEW");
+      const list = await listResponse.json() as { data?: Array<{ jobId: string; job: { title: string } }>; count: number };
+      expect(listResponse.status).toBe(200);
+      expect(list.count).toBe(1);
+      expect(list.data?.[0]).toMatchObject({ jobId: job.id, job: { title: "Software Engineer" } });
+
+      const invalidResponse = await fetch(endpoint, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "SUBMITTED", notes: "", appliedAt: "not-a-date", followUpAt: "" })
+      });
+      expect(invalidResponse.status).toBe(400);
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+    }
+  });
+
 });
