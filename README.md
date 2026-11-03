@@ -167,4 +167,4 @@ The API exposes a starter catalog of candidate Greenhouse, Lever, and Ashby boar
 - The configured source list summarizes stored postings per provider: listing count, how many have a provider-verification timestamp, and how many have an empty description.
 - The freshness label is derived from the newest stored `lastVerifiedAt` timestamp for that provider: recently verified (within 7 days), stale (older than 7 days), not verified, or no listings.
 - This is a database-derived freshness indicator, **not** a live provider connectivity check. Use the existing **Validate** action or live source smoke test to test whether a public board is currently reachable.
-- No new database migration is required.
+- A database migration adds per-job board attribution. Existing postings receive their board attribution on their next successful sync; until then, they are not counted under an individual board.
