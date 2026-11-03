@@ -60,6 +60,49 @@ describe("job sync SQLite integration", () => {
     await prisma.$disconnect();
   });
 
+  it("reports per-provider stored listing freshness without claiming live connectivity", async () => {
+    await prisma.jobSource.create({
+      data: { provider: "GREENHOUSE", boardId: "health-board", displayName: "Health Board" }
+    });
+    await prisma.job.create({
+      data: {
+        source: "GREENHOUSE", externalId: "health-verified", title: "Verified Role",
+        company: "Health Board", description: "A real description",
+        applicationUrl: "https://jobs.example.test/verified",
+        canonicalUrl: "https://jobs.example.test/verified",
+        lastVerifiedAt: new Date()
+      }
+    });
+    await prisma.job.create({
+      data: {
+        source: "GREENHOUSE", externalId: "health-empty", title: "Missing Description",
+        company: "Health Board", description: "",
+        applicationUrl: "https://jobs.example.test/empty",
+        canonicalUrl: "https://jobs.example.test/empty"
+      }
+    });
+
+    const server = app.listen(0);
+    try {
+      await new Promise<void>(resolve => server.once("listening", resolve));
+      const address = server.address();
+      if (!address || typeof address === "string") throw new Error("Test server did not bind to a TCP port");
+      const response = await fetch(`http://127.0.0.1:${address.port}/api/sources`);
+      const body = await response.json() as { data: Array<{ boardId: string; health: { listingCount: number; verifiedListingCount: number; missingDescriptionCount: number; freshness: string; lastVerifiedAt: string | null } }> };
+      const source = body.data.find(item => item.boardId === "health-board");
+      expect(response.status).toBe(200);
+      expect(source?.health).toMatchObject({
+        listingCount: 2,
+        verifiedListingCount: 1,
+        missingDescriptionCount: 1,
+        freshness: "RECENTLY_VERIFIED"
+      });
+      expect(source?.health.lastVerifiedAt).toBeTruthy();
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+    }
+  });
+
   it("persists normalized public postings in SQLite with source attribution", async () => {
     const source = await prisma.jobSource.create({
       data: { provider: "GREENHOUSE", boardId: "acme", displayName: "Acme Inc" }
