@@ -726,11 +726,11 @@ app.get("/api/sources", async (_req, res) => {
   try {
     const sources = await prisma.jobSource.findMany({ orderBy: { createdAt: "desc" } });
     const jobs = await prisma.job.findMany({
-      select: { source: true, lastVerifiedAt: true, description: true }
+      select: { source: true, sourceBoardId: true, lastVerifiedAt: true, description: true }
     });
     const now = Date.now();
     const data = sources.map(source => {
-      const sourceJobs = jobs.filter(job => job.source === source.provider);
+      const sourceJobs = jobs.filter(job => job.source === source.provider && job.sourceBoardId === source.boardId);
       const verifiedDates = sourceJobs
         .map(job => job.lastVerifiedAt)
         .filter((date): date is Date => date !== null);
