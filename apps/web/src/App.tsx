@@ -10,6 +10,8 @@ type Job = {
   applicationUrl: string;
   publishedAt: string | null;
   status: string;
+  isSaved?: boolean;
+  savedAt?: string;
   employmentType?: string;
   category?: string;
   skills?: string[];
@@ -98,6 +100,9 @@ export function App() {
   const [applicationRecords, setApplicationRecords] = useState<TrackedApplication[]>([]);
   const [trackingSaving, setTrackingSaving] = useState<string | null>(null);
   const [trackingMessage, setTrackingMessage] = useState("");
+  const [showSavedOnly, setShowSavedOnly] = useState(false);
+  const [savedJobsBusy, setSavedJobsBusy] = useState(false);
+  const [savingJobId, setSavingJobId] = useState<string | null>(null);
 
   const loadJobs = useCallback(async (filters = { query, location, source }) => {
     setLoading(true);
@@ -113,6 +118,7 @@ export function App() {
       const body = await response.json() as { data: Job[]; total: number };
       setJobs(body.data);
       setTotal(body.total ?? body.data.length);
+      setShowSavedOnly(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");
     } finally {
@@ -120,6 +126,46 @@ export function App() {
     }
   }, [query, location, source]);
 
+
+
+  const loadSavedJobs = useCallback(async () => {
+    setSavedJobsBusy(true);
+    setError("");
+    try {
+      const response = await fetch(API + "/api/saved-jobs");
+      const body = await response.json() as { data?: Job[]; count?: number; error?: string };
+      if (!response.ok || !body.data) throw new Error(body.error || "Could not load saved jobs");
+      setJobs(body.data);
+      setTotal(body.count ?? body.data.length);
+      setShowSavedOnly(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not load saved jobs");
+    } finally {
+      setSavedJobsBusy(false);
+    }
+  }, []);
+
+  async function toggleSavedJob(job: Job) {
+    setSavingJobId(job.id);
+    setError("");
+    try {
+      const response = await fetch(API + "/api/jobs/" + encodeURIComponent(job.id) + "/save", {
+        method: job.isSaved ? "DELETE" : "POST"
+      });
+      const body = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(body.error || "Could not update saved job");
+      if (job.isSaved && showSavedOnly) {
+        setJobs(current => current.filter(item => item.id !== job.id));
+        setTotal(current => Math.max(0, current - 1));
+      } else {
+        setJobs(current => current.map(item => item.id === job.id ? { ...item, isSaved: !job.isSaved } : item));
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not update saved job");
+    } finally {
+      setSavingJobId(null);
+    }
+  }
 
   const loadApplications = useCallback(async () => {
     try {
@@ -684,6 +730,8 @@ export function App() {
     <section className="toolbar">
       <div><h3>Job opportunities</h3><p>Browse and filter normalized public job listings.</p></div>
       <div className="toolbar-actions">
+        <button className="secondary" type="button" disabled={savedJobsBusy || loading} onClick={() => void loadSavedJobs()}>{savedJobsBusy ? "Loading saved…" : "★ Saved jobs"}</button>
+        {showSavedOnly && <button className="secondary" type="button" onClick={() => void loadJobs()}>All jobs</button>}
         <select value={source} onChange={e => setSource(e.target.value)} aria-label="Filter by source">
           <option value="">All sources</option>
           <option value="GREENHOUSE">Greenhouse</option>
@@ -731,6 +779,9 @@ export function App() {
         {!!job.skills?.length && <div className="skill-tags">{job.skills.slice(0, 8).map(skill => <span key={skill}>{skill}</span>)}</div>}
         {!!job.match?.matchedSkills.length && <p className="match-reason">Matched: {job.match.matchedSkills.join(", ")}</p>}
         <div className="job-actions">
+          <button className="small-action secondary" type="button" disabled={savingJobId === job.id} onClick={() => void toggleSavedJob(job)} aria-label={job.isSaved ? "Remove from saved jobs" : "Save job"}>
+            {savingJobId === job.id ? "Saving…" : job.isSaved ? "★ Saved" : "☆ Save job"}
+          </button>
           <button className="small-action secondary" type="button" disabled={analysisBusy === job.id} onClick={() => void analyzeFit(job.id)}>
             {analysisBusy === job.id ? "Analyzing…" : analysis?.jobId === job.id ? "Hide fit analysis" : "Analyze resume fit"}
           </button>
