@@ -165,6 +165,139 @@ app.get("/api/profile/resume", async (_req, res) => {
 });
 
 
+
+type SavedSearchFilters = {
+  query: string;
+  location: string;
+  company: string;
+  source: string;
+  employmentType: string;
+  workMode: string;
+  skills: string[];
+};
+
+function parseSavedSearchFilters(value: unknown): SavedSearchFilters | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const input = value as Record<string, unknown>;
+  const fields = ["query", "location", "company", "source", "employmentType", "workMode"] as const;
+  if (fields.some(field => input[field] !== undefined && (typeof input[field] !== "string" || (input[field] as string).length > 120))) return null;
+  const skills = input.skills ?? [];
+  if (!Array.isArray(skills) || skills.length > 20 || skills.some(skill => typeof skill !== "string" || !skill.trim() || skill.length > 80)) return null;
+  const workMode = typeof input.workMode === "string" ? input.workMode.toUpperCase() : "ANY";
+  const employmentType = typeof input.employmentType === "string" ? input.employmentType.toUpperCase() : "";
+  if (!["ANY", "REMOTE", "HYBRID", "ONSITE", "UNKNOWN"].includes(workMode)) return null;
+  if (employmentType && !["FULL_TIME", "PART_TIME", "INTERNSHIP", "CONTRACT", "UNKNOWN"].includes(employmentType)) return null;
+  const source = typeof input.source === "string" ? input.source.toUpperCase() : "";
+  if (source && !["GREENHOUSE", "LEVER", "ASHBY"].includes(source)) return null;
+  return {
+    query: typeof input.query === "string" ? input.query.trim() : "",
+    location: typeof input.location === "string" ? input.location.trim() : "",
+    company: typeof input.company === "string" ? input.company.trim() : "",
+    source,
+    employmentType,
+    workMode,
+    skills: skills.map((skill: string) => skill.trim())
+  };
+}
+
+function jobMatchesSavedSearch(job: {
+  title: string; company: string; location: string | null; description: string; source: string;
+  employmentType: string; skillsJson: string;
+}, filters: SavedSearchFilters): boolean {
+  const query = filters.query.toLowerCase();
+  const jobSkills = readJsonList(job.skillsJson);
+  return (!query || [job.title, job.company, job.description].some(value => value.toLowerCase().includes(query))) &&
+    (!filters.location || (job.location ?? "").toLowerCase().includes(filters.location.toLowerCase())) &&
+    (!filters.company || job.company.toLowerCase().includes(filters.company.toLowerCase())) &&
+    (!filters.source || job.source === filters.source) &&
+    (!filters.employmentType || job.employmentType === filters.employmentType) &&
+    matchesWorkMode(job.location, job.description, filters.workMode) &&
+    matchesRequiredSkills(jobSkills, filters.skills);
+}
+
+app.get("/api/saved-searches", async (_req, res) => {
+  try {
+    const searches = await prisma.savedSearch.findMany({
+      where: { userId: LOCAL_SAVED_JOBS_USER_ID },
+      orderBy: { createdAt: "desc" }
+    });
+    const data = searches.map(search => {
+      let filters: SavedSearchFilters = { query: "", location: "", company: "", source: "", employmentType: "", workMode: "ANY", skills: [] };
+      try { filters = parseSavedSearchFilters(JSON.parse(search.filtersJson)) ?? filters; } catch { /* use empty filter summary */ }
+      return { id: search.id, name: search.name, filters, createdAt: search.createdAt, lastCheckedAt: search.lastCheckedAt };
+    });
+    res.json({ data, count: data.length });
+  } catch (error) {
+    res.status(500).json({ error: "Unable to retrieve saved searches", detail: error instanceof Error ? error.message : "Unknown error" });
+  }
+});
+
+app.post("/api/saved-searches", async (req, res) => {
+  const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
+  const filters = parseSavedSearchFilters(req.body?.filters);
+  if (!name || name.length > 80 || !filters) {
+    res.status(400).json({ error: "Provide a name up to 80 characters and valid search filters." });
+    return;
+  }
+  try {
+    const saved = await prisma.savedSearch.create({
+      data: { userId: LOCAL_SAVED_JOBS_USER_ID, name, filtersJson: JSON.stringify(filters) }
+    });
+    res.status(201).json({ data: {
+      id: saved.id, name: saved.name, filters, createdAt: saved.createdAt, lastCheckedAt: saved.lastCheckedAt
+    } });
+  } catch (error) {
+    res.status(500).json({ error: "Unable to save search", detail: error instanceof Error ? error.message : "Unknown error" });
+  }
+});
+
+app.delete("/api/saved-searches/:id", async (req, res) => {
+  try {
+    const result = await prisma.savedSearch.deleteMany({
+      where: { id: req.params.id, userId: LOCAL_SAVED_JOBS_USER_ID }
+    });
+    if (!result.count) {
+      res.status(404).json({ error: "Saved search not found" });
+      return;
+    }
+    res.json({ data: { id: req.params.id, deleted: true } });
+  } catch (error) {
+    res.status(500).json({ error: "Unable to delete saved search", detail: error instanceof Error ? error.message : "Unknown error" });
+  }
+});
+
+app.get("/api/saved-searches/:id/alerts", async (req, res) => {
+  try {
+    const search = await prisma.savedSearch.findFirst({
+      where: { id: req.params.id, userId: LOCAL_SAVED_JOBS_USER_ID }
+    });
+    if (!search) {
+      res.status(404).json({ error: "Saved search not found" });
+      return;
+    }
+    const filters = parseSavedSearchFilters(JSON.parse(search.filtersJson));
+    if (!filters) {
+      res.status(422).json({ error: "Saved search filters are invalid. Delete and recreate this search." });
+      return;
+    }
+    const matchingJobs = await prisma.job.findMany({
+      where: { discoveredAt: { gt: search.lastCheckedAt } },
+      orderBy: { discoveredAt: "desc" },
+      take: 500
+    });
+    const data = matchingJobs.filter(job => jobMatchesSavedSearch(job, filters)).slice(0, 50).map(job => ({
+      id: job.id, title: job.title, company: job.company, location: job.location,
+      applicationUrl: job.applicationUrl, discoveredAt: job.discoveredAt
+    }));
+    const checkedAt = new Date();
+    await prisma.savedSearch.update({ where: { id: search.id }, data: { lastCheckedAt: checkedAt } });
+    res.json({ data, count: data.length, checkedAt, search: { id: search.id, name: search.name } });
+  } catch (error) {
+    res.status(500).json({ error: "Unable to check saved-search alerts", detail: error instanceof Error ? error.message : "Unknown error" });
+  }
+});
+
+
 const LOCAL_SAVED_JOBS_USER_ID = "local";
 
 app.get("/api/saved-jobs", async (_req, res) => {
