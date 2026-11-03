@@ -1,19 +1,29 @@
 # AI Job Agent Chrome Extension
 
-This is the first Phase 2 milestone. Version 0.1.0 only detects Greenhouse application forms and displays a small status notice.
+The Manifest V3 extension currently supports Greenhouse application detection and secure account pairing.
 
-## Load it in Chrome
+## Load or update it in Chrome
 
 1. Open `chrome://extensions`.
 2. Turn on **Developer mode**.
-3. Select **Load unpacked**.
+3. Select **Load unpacked** (first install), or click **Reload** after pulling updates.
 4. Choose the `apps/extension` folder from this repository.
-5. Open a Greenhouse-hosted job application page.
 
-The extension should show an **AI Job Agent** notice when it recognises an application form.
+## Connect your account
 
-## Current limitations
+1. Start the AI Job Agent API and web app locally.
+2. Sign in to AI Job Agent at `http://localhost:5173`.
+3. In your candidate profile, choose **Generate extension pairing code**.
+4. Click the AI Job Agent toolbar icon.
+5. Enter the 12-character one-time code and choose **Connect account**.
 
-- Detection only; it does not read your account or candidate profile.
-- It does not fill fields, upload files, click buttons, or submit applications.
-- Profile access will be added through a separate, authenticated connection in a later milestone.
+The pairing code expires after five minutes and can be used once. The extension access token expires after seven days. Use **Disconnect** in the popup to remove the token from this browser.
+
+## Current capabilities and limitations
+
+- Detects supported Greenhouse application forms.
+- Pairs with the signed-in AI Job Agent account using a one-time code.
+- Retrieves only contact fields and account email through a scoped extension endpoint.
+- Does not read resume contents, application drafts, or job tracker data.
+- Autofill is not enabled yet; the next milestone adds field preview and user-triggered fill.
+- Never uploads a resume, clicks application buttons, bypasses verification, or submits an application.
