@@ -108,3 +108,13 @@ The API exposes a starter catalog of candidate Greenhouse, Lever, and Ashby boar
 - **Save & mark reviewed** records the user's review timestamp. This means approved for the user's own manual use only; it does not submit an application, contact an employer, or authorize automated actions.
 - No external AI provider is called and no credentials for job boards are collected. Users must verify every statement, personalize the draft, and submit through the employer's official application process themselves.
 - After pulling this phase, run `npm run db:generate` and `npm run db:push` from the repository root to add the `ApplicationDraft` table to the local SQLite database.
+
+
+## Application pipeline tracker (Phase 1.16)
+
+- Track each discovered job through Saved, Preparing, Applied, Interview, Offer, Rejected, and Withdrawn states.
+- Record the date applied, a follow-up date, and private notes for recruiter conversations, interview preparation, and next steps.
+- The dashboard shows pipeline totals and a short list of recently updated applications; the API also supports filtering by status.
+- Tracking records are stored locally in SQLite and linked to their job. Deleting a job cascades to its tracking record.
+- Status changes are user-entered. The tracker does not detect employer responses, send messages, submit applications, or automate follow-ups.
+- After pulling this phase, run `npm run db:generate` and `npm run db:push` from the repository root to add the `ApplicationTracking` table to the local SQLite database.
