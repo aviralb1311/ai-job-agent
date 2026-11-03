@@ -75,7 +75,7 @@ type JobFitAnalysis = {
   strengths: string[]; gaps: string[]; recommendations: string[]; disclaimer: string;
 };
 const EMPTY_PROFILE: CandidateProfile = { skills: [], preferredRoles: [], locations: [], remotePreference: "ANY" };
-const API = import.meta.env.VITE_API_URL || "http://localhost:4000";
+const API = "http://localhost:4000";
 type AuthUser = { id: string; email: string; role: "USER" | "ADMIN" };
 const apiFetch = (input: RequestInfo | URL, init: RequestInit = {}) =>
   fetch(input, { ...init, credentials: "include" });
@@ -734,6 +734,62 @@ export function App() {
       setSources(current => current.filter(sourceItem => sourceItem.id !== item.id));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not remove source");
+    }
+  }
+
+
+  async function loadPrivateWorkspace() {
+    await Promise.all([loadProfile(), loadApplications(), loadSavedSearches()]);
+    try {
+      const response = await apiFetch(`${API}/api/profile/resume`);
+      const body = await response.json() as { data?: ResumeDraft };
+      if (response.ok && body.data) setResumeDraft(body.data);
+    } catch {
+      // Resume details are optional.
+    }
+  }
+
+  async function submitAuth(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setAuthBusy(true);
+    setAuthMessage("");
+    try {
+      const response = await apiFetch(`${API}/api/auth/${authMode === "register" ? "register" : "login"}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: authEmail, password: authPassword })
+      });
+      const body = await response.json() as { data?: { user?: AuthUser }; error?: string };
+      if (!response.ok || !body.data?.user) throw new Error(body.error || "Could not authenticate");
+      setUser(body.data.user);
+      setAuthPassword("");
+      setAuthMessage(authMode === "register" ? "Account created. You are signed in." : "Welcome back.");
+      await loadPrivateWorkspace();
+      await loadJobs();
+    } catch (e) {
+      setAuthMessage(e instanceof Error ? e.message : "Could not authenticate");
+    } finally {
+      setAuthBusy(false);
+    }
+  }
+
+  async function signOut() {
+    try {
+      await apiFetch(`${API}/api/auth/logout`, { method: "POST" });
+    } finally {
+      setUser(null);
+      setProfile(EMPTY_PROFILE);
+      setProfileSkills("");
+      setProfileRoles("");
+      setProfileLocations("");
+      setResumeDraft(null);
+      setApplicationRecords([]);
+      setSavedSearches([]);
+      setTrackingByJob({});
+      setAnalysis(null);
+      setApplicationDraft(null);
+      setAuthMessage("You have signed out.");
+      await loadJobs();
     }
   }
 
