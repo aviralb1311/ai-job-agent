@@ -871,6 +871,23 @@ export function App() {
   const sourceCount = new Set(jobs.map(job => job.source)).size;
 
   return <main className="shell">
+    <div className="dashboard-layout">
+      <aside className="sidebar">
+        <a className="sidebar-brand" href="#overview"><span className="brand-mark">JA</span><span><strong>AI Job Agent</strong><small>Career workspace</small></span></a>
+        <span className="sidebar-label">WORKSPACE</span>
+        <nav className="sidebar-nav" aria-label="Main navigation">
+          <a className="active" href="#overview"><span>⌂</span> Overview</a>
+          <a href="#jobs"><span>⌕</span> Find jobs</a>
+          <a href="#profile"><span>◎</span> My profile</a>
+          <a href="#resume"><span>▤</span> Resume</a>
+          <a href="#tracker"><span>▥</span> Applications</a>
+          <a href="#saved-searches"><span>☆</span> Saved searches</a>
+          <a href="#sources"><span>⌘</span> Job sources</a>
+        </nav>
+        <div className="sidebar-help"><span className="help-icon">✦</span><strong>Stay in control</strong><p>Your applications are always reviewed and submitted by you.</p></div>
+        <div className="sidebar-foot"><span className="live-dot" /> Public job discovery</div>
+      </aside>
+      <div className="dashboard-content">
     <header>
       <div className="brand-mark">JA</div>
       <div><h1>AI Job Agent</h1><p>Discover opportunities. Keep every application in your control.</p></div>
@@ -889,7 +906,7 @@ export function App() {
       {authMessage && <p className="resume-message" role="status">{authMessage}</p>}
     </section>}
 
-    <section className="hero">
+    <section className="hero" id="overview">
       <span className="eyebrow">PHASE 1 · JOB DISCOVERY</span>
       <h2>Your next opportunity starts here.</h2>
       <p>Search public company career boards from one place. Compare listings and open the original application.</p>
@@ -906,7 +923,7 @@ export function App() {
       <article className="metric"><span>Configured boards</span><strong>{sources.length}</strong><small>{sources.filter(item => item.enabled).length} enabled</small></article>
     </section>
 
-    {user && <section className="profile-section">
+    {user && <section className="profile-section" id="profile">
       <div className="section-heading">
         <div><span className="eyebrow-dark">YOUR CANDIDATE PROFILE</span><h3>What are you looking for?</h3><p>Set preferences to calculate transparent job relevance scores. No resume upload or AI API key is required.</p></div>
         <span className="profile-status">{profile.skills.length + profile.preferredRoles.length + profile.locations.length ? "Profile configured" : "Not configured"}</span>
@@ -967,7 +984,7 @@ export function App() {
     </section>}
 
 
-    {user && <section className="resume-section">
+    {user && <section className="resume-section" id="resume">
       <div className="section-heading">
         <div><span className="eyebrow-dark">RESUME INTELLIGENCE</span><h3>Extract your verified experience</h3><p>Upload a text-based PDF or DOCX (max 5 MB). Extraction runs locally through this API; your file is not retained or sent to an AI provider.</p></div>
       </div>
@@ -1000,7 +1017,7 @@ export function App() {
       <p className="form-hint">Extraction is heuristic and may miss sections, especially in multi-column or scanned resumes. Review and correct all entries. Scanned-image OCR is not included. Uploads are processed in memory and are not stored as files.</p>
     </section>}
 
-    {user?.role === "ADMIN" && <section className="source-manager">
+    {user?.role === "ADMIN" && <section className="source-manager" id="sources">
       <div className="section-heading">
         <div><span className="eyebrow-dark">SOURCE MANAGEMENT</span><h3>Company career boards</h3><p>Add public job boards and validate the connection before syncing.</p></div>
         <button className="secondary" disabled={sourcesLoading} onClick={() => void loadSources()}>{sourcesLoading ? "Loading…" : "Refresh sources"}</button>
@@ -1120,7 +1137,7 @@ export function App() {
     </section>}
 
 
-    {user && <section className="saved-search-section">
+    {user && <section className="saved-search-section" id="saved-searches">
       <div className="section-heading">
         <div><span className="eyebrow-dark">SAVED SEARCHES</span><h3>Keep an eye on matching roles</h3><p>Save the current filters and manually check for newly discovered matching jobs. Alerts stay in this dashboard.</p></div>
       </div>
@@ -1173,7 +1190,7 @@ export function App() {
     </section>}
 
 
-    {user && <section className="tracker-overview">
+    {user && <section className="tracker-overview" id="tracker">
       <div className="section-heading"><div><span className="eyebrow-dark">APPLICATION PIPELINE</span><h3>Track your applications</h3><p>Keep a record of progress, application dates, notes and follow-ups. Updates are manual; nothing is sent to employers.</p></div><button className="secondary" type="button" onClick={() => void loadApplications()}>Refresh tracker</button></div>
       <div className="tracker-stats">
         <article><span>Tracked</span><strong>{applicationRecords.length}</strong></article>
@@ -1191,7 +1208,7 @@ export function App() {
 
     {error && <div className="error" role="alert">{error}</div>}
 
-    <section className="jobs" aria-live="polite">
+    <section className="jobs" id="jobs" aria-live="polite">
       {jobs.map(job => <article className="job" key={job.id}>
         <div className="job-top"><span className={`source source-${job.source.toLowerCase()}`}>{job.source}</span><span className="status">{job.status}</span><span className={`revalidation-badge revalidation-${(job.revalidationState ?? "UNVERIFIED").toLowerCase()}`}>{job.revalidationState === "FRESH" ? "Recently verified" : job.revalidationState === "STALE" ? "Recheck recommended" : job.revalidationState === "EXPIRED" ? "Revalidation overdue" : "Not yet verified"}</span></div>
         <h3>{job.title}</h3>
@@ -1298,5 +1315,7 @@ export function App() {
     </section>
 
     <footer>AI Job Agent · Public job discovery · Applications always remain under your control.</footer>
+      </div>
+    </div>
   </main>;
 }
