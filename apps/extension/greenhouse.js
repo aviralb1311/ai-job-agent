@@ -7,7 +7,19 @@
   ].join(",");
 
   function findApplicationForm() {
-    return document.querySelector(FORM_SELECTOR);
+    const knownForm = document.querySelector(FORM_SELECTOR);
+    if (knownForm) return knownForm;
+
+    // MyGreenhouse can render the application inside a modal with different markup.
+    const candidates = document.querySelectorAll("[role='dialog'], dialog, form");
+    for (const candidate of candidates) {
+      const text = (candidate.innerText || candidate.textContent || "").toLowerCase();
+      if (/apply for this job|application form/.test(text) &&
+          candidate.querySelector("input, select, textarea")) {
+        return candidate;
+      }
+    }
+    return null;
   }
 
   function showHelper() {
@@ -42,7 +54,7 @@
     status.style.cssText = "margin:0 0 8px";
 
     const detail = document.createElement("p");
-    detail.textContent = "Your profile is not connected yet. The next update will add a secure connection and let you review recognised fields before autofill.";
+    detail.textContent = "Your account is connected. Profile matching and reviewed autofill are the next features to enable.";
     detail.style.cssText = "margin:0;color:#475569";
 
     const safety = document.createElement("p");
