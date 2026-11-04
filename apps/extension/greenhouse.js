@@ -35,6 +35,10 @@
     const host = document.createElement("div");
     host.id = ROOT_ID;
     host.style.cssText = "position:fixed;right:16px;bottom:16px;z-index:2147483647;font:14px/1.45 Arial,sans-serif";
+    // Keep clicks inside the extension UI from reaching Greenhouse modal/backdrop handlers.
+    for (const eventName of ["pointerdown", "mousedown", "click"]) {
+      host.addEventListener(eventName, (event) => event.stopPropagation());
+    }
 
     const shadow = host.attachShadow({ mode: "closed" });
     const wrapper = document.createElement("div");
@@ -68,7 +72,7 @@
     toggle.textContent = "AI Job Agent";
     toggle.setAttribute("aria-expanded", "false");
     toggle.style.cssText = "border:0;border-radius:999px;padding:12px 18px;background:#1d4ed8;color:#fff;font-weight:600;cursor:pointer;box-shadow:0 4px 14px rgba(15,23,42,.22)";
-    toggle.addEventListener("click", () => {
+    toggle.addEventListener("click", (event) => {\n      event.preventDefault();\n      event.stopPropagation();
       panel.hidden = !panel.hidden;
       toggle.setAttribute("aria-expanded", String(!panel.hidden));
       toggle.textContent = panel.hidden ? "AI Job Agent" : "Close helper";
