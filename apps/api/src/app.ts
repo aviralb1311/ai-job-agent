@@ -545,11 +545,19 @@ app.get("/api/jobs", optionalAuth, async (req, res) => {
       return;
     }
 
+    const isPostgresql = process.env.DATABASE_URL?.startsWith("postgresql:") ?? false;
+    const caseInsensitiveContains = (field: string, value: string) =>
+      isPostgresql ? { [field]: { contains: value, mode: "insensitive" } } : { [field]: { contains: value } };
+
     const where = {
       AND: [
-        ...queryTerms.map(term => ({ OR: [{ title: { contains: term } }, { company: { contains: term } }, { description: { contains: term } }] })),
-        location ? { location: { contains: location } } : {},
-        company ? { company: { contains: company } } : {},
+        ...queryTerms.map(term => ({ OR: [
+          caseInsensitiveContains("title", term),
+          caseInsensitiveContains("company", term),
+          caseInsensitiveContains("description", term)
+        ] })),
+        location ? caseInsensitiveContains("location", location) : {},
+        company ? caseInsensitiveContains("company", company) : {},
         source ? { source } : {},
         employmentType ? { employmentType } : {},
         listingStatus === "OPEN" ? { status: { not: "INACTIVE" } } : listingStatus === "INACTIVE" ? { status: "INACTIVE" } : {}

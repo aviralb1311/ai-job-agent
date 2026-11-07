@@ -26,6 +26,26 @@ describe("advanced job search helpers", () => {
     expect(matchesSearchQuery("Backend", "Acme", "", "backend engineer")).toBe(false);
   });
 
+  it("matches case-insensitively when stored values use mixed case", () => {
+    // Stored title has capitalised words, query is lowercase
+    expect(matchesSearchQuery("Pagination Role 0", "Pagination Co", "Backend work with Node.js", "pagination")).toBe(true);
+    // Stored title is lowercase, query is uppercase
+    expect(matchesSearchQuery("backend engineer", "acme", "", "BACKEND")).toBe(true);
+    // Mixed case in both directions
+    expect(matchesSearchQuery("Backend Engineer", "Acme", "", "BACKEND, ENGINEER!")).toBe(true);
+    // Company field mixed case
+    expect(matchesSearchQuery("Designer", "Backend Engineer Labs", "", "backend engineer")).toBe(true);
+    // Description field mixed case
+    expect(matchesSearchQuery("Product Manager", "Acme", "Experience with backend engineering systems", "BACKEND")).toBe(true);
+  });
+
+  it("ranks case-insensitively with identical scores regardless of query casing", () => {
+    const upper = textRelevance("Backend Engineer", "Acme", "", "BACKEND ENGINEER");
+    const lower = textRelevance("Backend Engineer", "Acme", "", "backend engineer");
+    expect(upper.score).toBe(lower.score);
+    expect(upper.reasons).toEqual(lower.reasons);
+  });
+
   it("ranks exact title phrases above company matches, and company above description matches", () => {
     const exactTitle = textRelevance("Backend Engineer", "Acme", "", "backend engineer");
     const reorderedTitle = textRelevance("Engineer for Backend Systems", "Acme", "", "backend engineer");

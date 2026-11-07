@@ -63,7 +63,7 @@ const leverJob = {
   url: "https://jobs.example.test/backend#apply"
 };
 
-describe("job sync SQLite integration", () => {
+describe("job sync database integration", () => {
   beforeEach(async () => {
     await prisma.session.deleteMany();
     await prisma.user.deleteMany();

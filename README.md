@@ -29,6 +29,7 @@ For a **new, empty** SQLite file only, initialize its tables with `npm run db:pu
 ### Database modes
 
 - **Local development:** SQLite uses `apps/api/prisma/schema.prisma` and `apps/api/prisma/migrations`. `npm run dev`, `npm run build:development`, and `npm run test:sqlite` generate the SQLite Prisma Client before compiling or running. Tests use the separate `integration-test.db` file.
+- **PostgreSQL integration tests:** Use a disposable PostgreSQL instance bound to `127.0.0.1:55432` and a database named `ai_job_agent_test`. The dedicated command requires `POSTGRES_TEST_DATABASE_URL` and rejects non-PostgreSQL URLs, non-loopback hosts, other ports, or other database names before running Prisma commands. It maps the checked URL to `DATABASE_URL` and `DIRECT_URL`, generates the PostgreSQL client, applies only the checked-in PostgreSQL migrations, then runs the API suite sequentially. The API integration suite clears tables, so never point this command at a database with data you need. Do not run it at the same time as SQLite tests or builds because both providers share the generated Prisma Client location.
 - **Production:** Neon PostgreSQL uses `apps/api/prisma/postgresql/schema.prisma` and its separate migration directory. `npm run build` (same as `npm run build:production`) generates the PostgreSQL client before compiling the API, then builds the frontend. `DATABASE_URL` is the runtime connection URL; `DIRECT_URL` is the direct connection URL used by Prisma migrations and schema-based client generation. Do not put these values in Vite variables or commit them.
 - **Build ordering:** SQLite and PostgreSQL Prisma Clients are generated into the same `@prisma/client` output. Build scripts run generation and TypeScript compilation sequentially. Do not run `npm run dev`, `npm run test:sqlite`, `npm run build:development`, or `npm run build` at the same time; each can select a different client provider.
 - **Migration safety:** Never apply SQLite migrations to PostgreSQL. The initial PostgreSQL baseline at `apps/api/prisma/postgresql/migrations/20261107104010_init/migration.sql` was generated locally from an empty schema and has not been applied anywhere. Review it, test it on an isolated PostgreSQL database or Neon development branch, then use `npm run db:migrate:deploy:postgresql` with `DIRECT_URL` set to the direct PostgreSQL URL when deploying. This creates an empty PostgreSQL schema; it does not copy local SQLite data.
@@ -53,6 +54,8 @@ These are public board identifiers, not arbitrary company names. Check each prov
 - `npm run build` or `npm run build:production` — generate the PostgreSQL Prisma Client, then build shared code, API, and frontend in order
 - `npm run build:development` — generate the SQLite Prisma Client, then build shared code, API, and frontend in order
 - `npm run test` or `npm run test:sqlite` — prepare and run API tests against a separate `apps/api/integration-test.db` SQLite database; test fixtures and sync history cannot pollute your development `dev.db`.
+- `npm run test:postgresql:guard` — test the PostgreSQL test URL safety checks without connecting to a database.
+- `npm run test:postgresql` — guarded PostgreSQL API integration tests; requires the disposable local database described below.
 - `npm run test:live-sources -w @job-agent/api` — manually smoke-test live public feeds (requires three board IDs)
 - `npm run db:generate` — generate Prisma client
 - `npm run db:migrate` — create/apply local migration
@@ -60,6 +63,23 @@ These are public board identifiers, not arbitrary company names. Check each prov
 - `npm run db:migrate:dev:sqlite` / `npm run db:migrate:dev:postgresql` — create and apply a development migration for the selected provider
 - `npm run db:migrate:deploy:sqlite` / `npm run db:migrate:deploy:postgresql` — apply checked-in migrations for the selected provider
 - `npm run db:check-schemas` — check that the two model definitions stay aligned
+
+### Disposable PostgreSQL integration-test database
+
+These commands create a temporary PostgreSQL cluster under `/tmp`; they do not use Docker, Neon, Render, or production credentials. PostgreSQL 18 server tools must be installed. The temporary cluster uses trust authentication and listens only on loopback:
+
+```bash
+initdb -D /tmp/ai-job-agent-pg-test/data --username=postgres --auth-local=trust --auth-host=trust
+pg_ctl -D /tmp/ai-job-agent-pg-test/data \
+  -l /tmp/ai-job-agent-pg-test/postgres.log \
+  -o "-h 127.0.0.1 -p 55432" -w start
+createdb -h 127.0.0.1 -p 55432 -U postgres ai_job_agent_test
+export POSTGRES_TEST_DATABASE_URL='postgresql://postgres@127.0.0.1:55432/ai_job_agent_test?schema=public'
+npm run test:postgresql:guard
+npm run test:postgresql
+```
+
+The test runner validates `POSTGRES_TEST_DATABASE_URL` before invoking Prisma. It supplies that URL to both `DATABASE_URL` and `DIRECT_URL`; no `.env` edit is needed. It refuses remote hosts, embedded passwords, and any database other than the designated test database. To stop the test server, run `pg_ctl -D /tmp/ai-job-agent-pg-test/data -m fast -w stop`. After confirming the directory contains only this disposable cluster, remove `/tmp/ai-job-agent-pg-test` to discard it. If a test process is interrupted and leaves the coordination lock, first verify no PostgreSQL test runner is active before removing `/tmp/ai-job-agent-postgresql-test-$(id -u).lock`.
 
 ## Continuous integration
 GitHub Actions runs on pushes and pull requests targeting `main`. It installs from the lockfile, generates Prisma Client, builds all workspaces, runs API tests, and checks dependencies with `npm audit`.

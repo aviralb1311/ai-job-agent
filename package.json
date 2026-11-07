@@ -14,6 +14,8 @@
     "build:production": "npm run build -w @job-agent/shared && npm run build:production -w @job-agent/api && npm run build -w @job-agent/web",
     "test": "npm run test:sqlite",
     "test:sqlite": "npm run test -w @job-agent/api",
+    "test:postgresql": "npm run test:postgresql -w @job-agent/api",
+    "test:postgresql:guard": "npm run test:postgresql:guard -w @job-agent/api",
     "db:generate": "npm run db:generate -w @job-agent/api",
     "db:migrate": "npm run db:migrate -w @job-agent/api",
     "db:push": "npm run db:push -w @job-agent/api",

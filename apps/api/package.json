@@ -13,6 +13,8 @@
     "start": "node dist/server.js",
     "test": "DATABASE_URL=file:./integration-test.db vitest run --config vitest.config.ts",
     "test:sqlite": "npm run test",
+    "test:postgresql": "node scripts/run-postgresql-tests.mjs",
+    "test:postgresql:guard": "node scripts/postgresql-test-url.test.mjs",
     "pretest": "npm run db:generate:sqlite && DATABASE_URL=file:./integration-test.db prisma db push --schema prisma/schema.prisma",
     "db:generate:sqlite": "prisma generate --schema prisma/schema.prisma",
     "db:generate:postgresql": "prisma generate --schema prisma/postgresql/schema.prisma",
