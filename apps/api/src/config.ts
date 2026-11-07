@@ -16,6 +16,16 @@ const schema = z.object({
 });
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
+  if (env.NODE_ENV === "production") {
+    const databaseUrl = env.DATABASE_URL?.trim() ?? "";
+    if (!databaseUrl) {
+      throw new Error("DATABASE_URL is required in production.");
+    }
+    if (!/^postgres(ql)?:\/\//.test(databaseUrl)) {
+      throw new Error("DATABASE_URL must use the PostgreSQL protocol in production.");
+    }
+  }
+
   const defaults = {
     ...env,
     AUTH_COOKIE_SECURE: env.AUTH_COOKIE_SECURE ?? (env.NODE_ENV === "production" ? "true" : "false")
