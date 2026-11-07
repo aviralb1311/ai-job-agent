@@ -1,4 +1,4 @@
-const API_BASE = "http://localhost:4000";
+const API_BASE = globalThis.AI_JOB_AGENT_CONFIG.apiBaseUrl.replace(/\/+$/, "");
 
 const codeInput = document.getElementById("pairing-code");
 const connectButton = document.getElementById("connect-button");

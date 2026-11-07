@@ -1,0 +1,298 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id           String       @id @default(cuid())
+  email        String       @unique
+  passwordHash String?
+  role         String       @default("USER")
+  createdAt    DateTime     @default(now())
+  profile      UserProfile?
+  sessions     Session[]
+  candidateData UserCandidateProfile?
+  savedJobEntries UserSavedJob[]
+  savedSearchEntries UserSavedSearch[]
+  applicationDrafts UserApplicationDraft[]
+  applicationTracking UserApplicationTracking[]
+  extensionPairingCodes ExtensionPairingCode[]
+  extensionAccessTokens ExtensionAccessToken[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model UserProfile {
+  id             String   @id @default(cuid())
+  userId         String   @unique
+  fullName       String?
+  education      String?
+  graduationYear Int?
+  skillsJson     String   @default("[]")
+  preferredRoles String   @default("[]")
+  locations      String   @default("[]")
+  remotePreference String @default("ANY")
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model JobSource {
+  id          String   @id @default(cuid())
+  provider    String
+  boardId     String
+  displayName String?
+  enabled     Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  @@unique([provider, boardId])
+}
+
+model CandidateProfile {
+  id               String   @id @default("default")
+  skillsJson       String   @default("[]")
+  preferredRoles   String   @default("[]")
+  locations        String   @default("[]")
+  remotePreference String   @default("ANY")
+  updatedAt        DateTime @updatedAt
+  educationJson    String   @default("[]")
+  experienceJson   String   @default("[]")
+  projectsJson     String   @default("[]")
+  certificationsJson String @default("[]")
+}
+
+model Job {
+  id              String   @id @default(cuid())
+  source          String
+  sourceBoardId   String?
+  externalId      String
+  title           String
+  company         String
+  location        String?
+  description     String
+  employmentType  String   @default("UNKNOWN")
+  applicationUrl  String
+  canonicalUrl    String
+  publishedAt     DateTime?
+  discoveredAt    DateTime @default(now())
+  lastVerifiedAt  DateTime?
+  status          String   @default("UNKNOWN")
+  category        String   @default("OTHER")
+  skillsJson      String   @default("[]")
+  applicationDraft ApplicationDraft?
+  applicationTracking ApplicationTracking?
+  savedEntries SavedJob[]
+  userSavedEntries UserSavedJob[]
+  userApplicationDrafts UserApplicationDraft[]
+  userApplicationTracking UserApplicationTracking[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  @@unique([source, externalId])
+  @@index([title])
+  @@index([company])
+  @@index([location])
+  @@index([publishedAt])
+}
+
+model SavedJob {
+  id        String   @id @default(cuid())
+  userId    String
+  jobId     String
+  createdAt DateTime @default(now())
+  job       Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  @@unique([userId, jobId])
+  @@index([userId])
+}
+
+model SearchHistory {
+  id        String   @id @default(cuid())
+  userId    String?
+  query     String
+  filters   String   @default("{}")
+  createdAt DateTime @default(now())
+}
+
+
+model ApplicationDraft {
+  id             String   @id @default(cuid())
+  jobId          String   @unique
+  resumeSummary  String   @default("")
+  highlightsJson String   @default("[]")
+  coverLetter    String   @default("")
+  reviewNotesJson String  @default("[]")
+  status         String   @default("DRAFT")
+  reviewedAt     DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  job            Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+}
+
+
+model ApplicationTracking {
+  id          String   @id @default(cuid())
+  jobId       String   @unique
+  status      String   @default("SAVED")
+  notes       String   @default("")
+  appliedAt   DateTime?
+  followUpAt  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  job         Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  @@index([status])
+  @@index([followUpAt])
+}
+
+
+model SavedSearch {
+  id            String   @id @default(cuid())
+  userId        String   @default("local")
+  name          String
+  filtersJson   String   @default("{}")
+  createdAt     DateTime @default(now())
+  lastCheckedAt DateTime @default(now())
+  @@index([userId])
+}
+
+
+model SyncRun {
+  id               String   @id @default(cuid())
+  provider         String
+  boardId          String
+  status           String
+  fetched          Int      @default(0)
+  inserted         Int      @default(0)
+  updated          Int      @default(0)
+  duplicatesSkipped Int     @default(0)
+  deactivated       Int     @default(0)
+  errorsJson       String   @default("[]")
+  durationMs       Int      @default(0)
+  startedAt        DateTime @default(now())
+  completedAt      DateTime
+  @@index([provider, boardId, startedAt])
+  @@index([startedAt])
+}
+
+
+/// Per-account candidate preferences and reviewed resume content.
+/// The legacy CandidateProfile is retained untouched for safe data migration.
+model UserCandidateProfile {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  skillsJson         String   @default("[]")
+  preferredRoles     String   @default("[]")
+  locations          String   @default("[]")
+  remotePreference   String   @default("ANY")
+  educationJson      String   @default("[]")
+  experienceJson     String   @default("[]")
+  projectsJson       String   @default("[]")
+  certificationsJson String   @default("[]")
+  fullName           String   @default("")
+  phone              String   @default("")
+  city               String   @default("")
+  state              String   @default("")
+  pinCode            String   @default("")
+  linkedinUrl        String   @default("")
+  githubUrl          String   @default("")
+  portfolioUrl       String   @default("")
+  updatedAt          DateTime @updatedAt
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model UserSavedJob {
+  id        String   @id @default(cuid())
+  userId    String
+  jobId     String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job       Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  @@unique([userId, jobId])
+  @@index([userId])
+  @@index([jobId])
+}
+
+model UserSavedSearch {
+  id            String   @id @default(cuid())
+  userId        String
+  name          String
+  filtersJson   String   @default("{}")
+  createdAt     DateTime @default(now())
+  lastCheckedAt DateTime @default(now())
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+}
+
+model UserApplicationDraft {
+  id              String   @id @default(cuid())
+  userId          String
+  jobId           String
+  resumeSummary   String   @default("")
+  highlightsJson  String   @default("[]")
+  coverLetter     String   @default("")
+  reviewNotesJson String   @default("[]")
+  status          String   @default("DRAFT")
+  workflowStatus  String   @default("DRAFT")
+  approvedAt      DateTime?
+  reviewedAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job             Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  @@unique([userId, jobId])
+  @@index([userId])
+  @@index([jobId])
+}
+
+model UserApplicationTracking {
+  id         String   @id @default(cuid())
+  userId     String
+  jobId      String
+  status     String   @default("SAVED")
+  notes      String   @default("")
+  appliedAt  DateTime?
+  followUpAt DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job        Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  @@unique([userId, jobId])
+  @@index([userId])
+  @@index([jobId])
+  @@index([status])
+  @@index([followUpAt])
+}
+
+/// One-time code used to pair the browser extension with a signed-in account.
+model ExtensionPairingCode {
+  id        String   @id @default(cuid())
+  codeHash  String   @unique
+  userId    String
+  expiresAt DateTime
+  consumedAt DateTime?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+/// Short-lived, revocable bearer credential issued to a paired extension.
+model ExtensionAccessToken {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+  @@index([expiresAt])
+}

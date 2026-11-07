@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { FollowUpQueue } from "./FollowUpQueue.js";
+import { API_BASE_URL, apiFetch } from "./api.js";
 import type { FormEvent } from "react";
 
 type Job = {
@@ -21,11 +22,17 @@ type Job = {
   category?: string;
   skills?: string[];
   match?: { score: number | null; matchedSkills: string[]; missingSkills: string[]; reasons: string[] };
+  searchRelevance?: { score: number; reasons: string[] };
   workMode?: "REMOTE" | "HYBRID" | "ONSITE" | "UNKNOWN";
 };
 type SavedSearchFilters = { query: string; location: string; company: string; source: string; employmentType: string; workMode: string; sort: string; skills: string[] };
 type SavedSearch = { id: string; name: string; filters: SavedSearchFilters; createdAt: string; lastCheckedAt: string };
 type SearchAlertJob = { id: string; title: string; company: string; location: string | null; applicationUrl: string; discoveredAt: string };
+type JobSearchFilters = { query: string; location: string; source: string; employmentType: string; workMode: string; companyFilter: string; requiredSkills: string; sort: string; listingStatus?: string };
+const jobSearchKey = (filters: JobSearchFilters) => JSON.stringify([
+  filters.query, filters.location, filters.source, filters.employmentType, filters.workMode,
+  filters.companyFilter, filters.requiredSkills, filters.sort, filters.listingStatus ?? "OPEN"
+]);
 type SyncSummary = {
   fetched: number;
   inserted: number;
@@ -75,10 +82,8 @@ type JobFitAnalysis = {
   strengths: string[]; gaps: string[]; recommendations: string[]; disclaimer: string;
 };
 const EMPTY_PROFILE: CandidateProfile = { skills: [], preferredRoles: [], locations: [], remotePreference: "ANY", fullName: "", phone: "", city: "", state: "", pinCode: "", linkedinUrl: "", githubUrl: "", portfolioUrl: "", email: "" };
-const API = "http://localhost:4000";
+const API = API_BASE_URL;
 type AuthUser = { id: string; email: string; role: "USER" | "ADMIN" };
-const apiFetch = (input: RequestInfo | URL, init: RequestInit = {}) =>
-  fetch(input, { ...init, credentials: "include" });
 
 
 function formatJobDescription(description: string): string {
@@ -116,6 +121,13 @@ export function App() {
   const [sort, setSort] = useState("NEWEST");
   const [listingStatus, setListingStatus] = useState("OPEN");
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [nextJobOffset, setNextJobOffset] = useState(0);
+  const [hasMoreJobs, setHasMoreJobs] = useState(false);
+  const [loadedJobSearchKey, setLoadedJobSearchKey] = useState("");
+  const jobRequestId = useRef(0);
+  const loadingJobsRef = useRef(false);
+  const loadingMoreJobsRef = useRef(false);
   const [syncing, setSyncing] = useState(false);
   const [sourcesLoading, setSourcesLoading] = useState(false);
   const [savingSource, setSavingSource] = useState(false);
@@ -154,7 +166,7 @@ export function App() {
   const [applicationRecords, setApplicationRecords] = useState<TrackedApplication[]>([]);
   const [trackingSaving, setTrackingSaving] = useState<string | null>(null);
   const [trackingMessage, setTrackingMessage] = useState("");
-  const [showSavedOnly, setShowSavedOnly] = useState(false);
+  const [savedJobs, setSavedJobs] = useState<Job[]>([]);
   const [savedJobsBusy, setSavedJobsBusy] = useState(false);
   const [savingJobId, setSavingJobId] = useState<string | null>(null);
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([]);
@@ -164,31 +176,69 @@ export function App() {
   const [searchAlerts, setSearchAlerts] = useState<Record<string, SearchAlertJob[]>>({});
   const [searchAlertMessages, setSearchAlertMessages] = useState<Record<string, string>>({});
 
-  const loadJobs = useCallback(async (filters: { query: string; location: string; source: string; employmentType: string; workMode: string; companyFilter: string; requiredSkills: string; sort: string; listingStatus?: string } = { query, location, source, employmentType, workMode, companyFilter, requiredSkills, sort, listingStatus }) => {
-    setLoading(true);
+  const currentJobSearchKey = jobSearchKey({ query, location, source, employmentType, workMode, companyFilter, requiredSkills, sort, listingStatus });
+  const loadJobs = useCallback(async (
+    filters: JobSearchFilters = { query, location, source, employmentType, workMode, companyFilter, requiredSkills, sort, listingStatus },
+    options: { append?: boolean; offset?: number } = {}
+  ) => {
+    const append = options.append ?? false;
+    if (append && (loadingJobsRef.current || loadingMoreJobsRef.current)) return;
+
+    const effectiveFilters = { ...filters, listingStatus: filters.listingStatus ?? listingStatus };
+    const requestId = ++jobRequestId.current;
+    if (append) {
+      loadingMoreJobsRef.current = true;
+      setLoadingMore(true);
+    } else {
+      loadingJobsRef.current = true;
+      loadingMoreJobsRef.current = false;
+      setLoading(true);
+      setLoadingMore(false);
+      setHasMoreJobs(false);
+    }
     setError("");
     try {
       const params = new URLSearchParams();
-      if (filters.query.trim()) params.set("q", filters.query.trim());
-      if (filters.location.trim()) params.set("location", filters.location.trim());
-      if (filters.source) params.set("source", filters.source);
-      if (filters.employmentType) params.set("employmentType", filters.employmentType);
-      if (filters.workMode !== "ANY") params.set("workMode", filters.workMode);
-      if (filters.companyFilter.trim()) params.set("company", filters.companyFilter.trim());
-      if (filters.requiredSkills.trim()) params.set("skills", filters.requiredSkills.trim());
-      params.set("sort", filters.sort);
-      params.set("listingStatus", filters.listingStatus ?? listingStatus);
+      if (effectiveFilters.query.trim()) params.set("q", effectiveFilters.query.trim());
+      if (effectiveFilters.location.trim()) params.set("location", effectiveFilters.location.trim());
+      if (effectiveFilters.source) params.set("source", effectiveFilters.source);
+      if (effectiveFilters.employmentType) params.set("employmentType", effectiveFilters.employmentType);
+      if (effectiveFilters.workMode !== "ANY") params.set("workMode", effectiveFilters.workMode);
+      if (effectiveFilters.companyFilter.trim()) params.set("company", effectiveFilters.companyFilter.trim());
+      if (effectiveFilters.requiredSkills.trim()) params.set("skills", effectiveFilters.requiredSkills.trim());
+      params.set("sort", effectiveFilters.sort);
+      params.set("listingStatus", effectiveFilters.listingStatus);
       params.set("limit", "100");
+      const offset = append ? options.offset ?? 0 : 0;
+      params.set("offset", String(offset));
       const response = await apiFetch(`${API}/api/jobs?${params.toString()}`);
       if (!response.ok) throw new Error("Could not load jobs. Check that the API and database are running.");
-      const body = await response.json() as { data: Job[]; total: number };
-      setJobs(body.data);
+      const body = await response.json() as { data: Job[]; total: number; nextOffset?: number; hasMore?: boolean };
+      if (requestId !== jobRequestId.current) return;
+      if (append) {
+        setJobs(current => {
+          const knownJobIds = new Set(current.map(job => job.id));
+          return [...current, ...body.data.filter(job => !knownJobIds.has(job.id))];
+        });
+      } else {
+        setJobs(body.data);
+        setLoadedJobSearchKey(jobSearchKey(effectiveFilters));
+      }
       setTotal(body.total ?? body.data.length);
-      setShowSavedOnly(false);
+      setNextJobOffset(body.nextOffset ?? offset + body.data.length);
+      setHasMoreJobs(body.hasMore ?? offset + body.data.length < body.total);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Something went wrong");
+      if (requestId === jobRequestId.current) setError(e instanceof Error ? e.message : "Something went wrong");
     } finally {
-      setLoading(false);
+      if (requestId === jobRequestId.current) {
+        if (append) {
+          loadingMoreJobsRef.current = false;
+          setLoadingMore(false);
+        } else {
+          loadingJobsRef.current = false;
+          setLoading(false);
+        }
+      }
     }
   }, [query, location, source, employmentType, workMode, companyFilter, requiredSkills, sort, listingStatus]);
 
@@ -285,9 +335,7 @@ export function App() {
       const response = await apiFetch(API + "/api/saved-jobs");
       const body = await response.json() as { data?: Job[]; count?: number; error?: string };
       if (!response.ok || !body.data) throw new Error(body.error || "Could not load saved jobs");
-      setJobs(body.data);
-      setTotal(body.count ?? body.data.length);
-      setShowSavedOnly(true);
+      setSavedJobs(body.data.map(job => ({ ...job, isSaved: true })));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not load saved jobs");
     } finally {
@@ -304,12 +352,9 @@ export function App() {
       });
       const body = await response.json() as { error?: string };
       if (!response.ok) throw new Error(body.error || "Could not update saved job");
-      if (job.isSaved && showSavedOnly) {
-        setJobs(current => current.filter(item => item.id !== job.id));
-        setTotal(current => Math.max(0, current - 1));
-      } else {
-        setJobs(current => current.map(item => item.id === job.id ? { ...item, isSaved: !job.isSaved } : item));
-      }
+      setJobs(current => current.map(item => item.id === job.id ? { ...item, isSaved: !job.isSaved } : item));
+      if (job.isSaved) setSavedJobs(current => current.filter(item => item.id !== job.id));
+      else await loadSavedJobs();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not update saved job");
     } finally {
@@ -782,7 +827,7 @@ export function App() {
 
 
   async function loadPrivateWorkspace() {
-    await Promise.all([loadProfile(), loadApplications(), loadSavedSearches()]);
+    await Promise.all([loadProfile(), loadApplications(), loadSavedSearches(), loadSavedJobs()]);
     try {
       const response = await apiFetch(`${API}/api/profile/resume`);
       const body = await response.json() as { data?: ResumeDraft };
@@ -828,6 +873,7 @@ export function App() {
       setProfileLocations("");
       setResumeDraft(null);
       setApplicationRecords([]);
+      setSavedJobs([]);
       setSavedSearches([]);
       setTrackingByJob({});
       setAnalysis(null);
@@ -880,7 +926,8 @@ export function App() {
           <a href="#jobs"><span>⌕</span> Find jobs</a>
           <a href="#profile"><span>◎</span> My profile</a>
           <a href="#resume"><span>▤</span> Resume</a>
-          <a href="#tracker"><span>▥</span> Applications</a>
+          {user && <a href="#saved-jobs"><span>★</span> Saved Jobs</a>}
+          <a href="#tracker"><span>▥</span> Application Tracker</a>
           <a href="#saved-searches"><span>☆</span> Saved searches</a>
           <a href="#sources"><span>⌘</span> Job sources</a>
         </nav>
@@ -1090,15 +1137,13 @@ export function App() {
     </section>
 
     <section className="toolbar">
-      <div><h3>Job opportunities</h3><p>Browse, filter and rank normalized public job listings.</p></div>
+      <div><h3>Job opportunities</h3><p>{loading && !jobs.length ? "Loading matching jobs…" : `Showing ${jobs.length} of ${total} matching jobs`}</p></div>
       <div className="toolbar-actions">
-        {user && <button className="secondary" type="button" disabled={savedJobsBusy || loading} onClick={() => void loadSavedJobs()}>{savedJobsBusy ? "Loading saved…" : "★ Saved jobs"}</button>}
-        {showSavedOnly && <button className="secondary" type="button" onClick={() => void loadJobs()}>All jobs</button>}
         <button className="secondary" disabled={loading || syncing} onClick={() => void loadJobs()}>Refresh</button>
         {user?.role === "ADMIN" && <button disabled={syncing} onClick={() => void sync()}>{syncing ? "Syncing sources…" : "↻ Sync job sources"}</button>}
       </div>
     </section>
-    {!showSavedOnly && <section className="advanced-filters" aria-label="Advanced job filters">
+    <section className="advanced-filters" aria-label="Advanced job filters">
       <label>Company
         <input value={companyFilter} onChange={event => setCompanyFilter(event.target.value)} placeholder="Company name" />
       </label>
@@ -1134,6 +1179,27 @@ export function App() {
       <button type="button" className="secondary" disabled={loading} onClick={() => {
         setEmploymentType(""); setWorkMode("ANY"); setCompanyFilter(""); setRequiredSkills(""); setSort("NEWEST"); setSource(""); setListingStatus("OPEN"); void loadJobs({ query, location, source: "", employmentType: "", workMode: "ANY", companyFilter: "", requiredSkills: "", sort: "NEWEST", listingStatus: "OPEN" });
       }}>Clear filters</button>
+    </section>
+
+    {user && <section className="saved-jobs-section" id="saved-jobs" aria-labelledby="saved-jobs-heading">
+      <div className="section-heading">
+        <div><span className="eyebrow-dark">YOUR SHORTLIST</span><h3 id="saved-jobs-heading">Saved Jobs</h3><p>Jobs you bookmarked for this account. Your saved listings are private to you.</p></div>
+        <button className="secondary" type="button" disabled={savedJobsBusy} onClick={() => void loadSavedJobs()}>{savedJobsBusy ? "Refreshing…" : "Refresh saved jobs"}</button>
+      </div>
+      {savedJobsBusy && !savedJobs.length ? <p className="form-hint" role="status">Loading your saved jobs…</p>
+        : savedJobs.length ? <div className="saved-job-list">
+          {savedJobs.map(job => <article className="saved-job-card" key={job.id}>
+            <div className="saved-job-info">
+              <div className="saved-job-heading"><h4>{job.title}</h4>{job.match?.score !== null && job.match?.score !== undefined && <span className="match-score">{job.match.score}% profile match</span>}</div>
+              <strong>{job.company}</strong>
+              <div className="saved-job-meta"><span>{job.location || "Location not specified"}</span><span className={`source source-${job.source.toLowerCase()}`}>{job.source}</span></div>
+            </div>
+            <div className="saved-job-actions">
+              <a href={job.applicationUrl} target="_blank" rel="noreferrer">View original listing ↗</a>
+              <button className="small-action danger-action" type="button" disabled={savingJobId === job.id} onClick={() => void toggleSavedJob(job)}>{savingJobId === job.id ? "Removing…" : "Remove saved job"}</button>
+            </div>
+          </article>)}
+        </div> : <p className="saved-jobs-empty">No saved jobs yet. Use <strong>☆ Save job</strong> on a listing in Find Jobs to add it here.</p>}
     </section>}
 
 
@@ -1229,10 +1295,12 @@ export function App() {
         </details>
         <div className="job-intelligence">
           <span className="category-chip">{(job.category || "OTHER").replaceAll("_", " ")}</span>
-          {job.match?.score !== null && job.match?.score !== undefined && <span className="match-score">{job.match.score}% match</span>}
+          {job.match?.score !== null && job.match?.score !== undefined && <span className="match-score">{job.match.score}% profile match</span>}
+          {job.searchRelevance && job.searchRelevance.score > 0 && <span className="search-relevance-score">{job.searchRelevance.score}% search relevance</span>}
         </div>
         {!!job.skills?.length && <div className="skill-tags">{job.skills.slice(0, 8).map(skill => <span key={skill}>{skill}</span>)}</div>}
         {!!job.match?.matchedSkills.length && <p className="match-reason">Matched: {job.match.matchedSkills.join(", ")}</p>}
+        {!!job.searchRelevance?.reasons.length && <p className="search-relevance-reasons">Search match: {job.searchRelevance.reasons.join(" · ")}</p>}
         <div className="job-actions">
           {user && <>
             <button className="small-action secondary" type="button" disabled={savingJobId === job.id} onClick={() => void toggleSavedJob(job)} aria-label={job.isSaved ? "Remove from saved jobs" : "Save job"}>
@@ -1311,8 +1379,14 @@ export function App() {
         </div>}
       </article>)}
       {!jobs.length && !loading && <div className="empty"><h3>No matching jobs</h3><p>Add public board IDs in Source Management, then sync job sources. You can also adjust your search filters.</p></div>}
-      {loading && <div className="empty loading-state">Loading job opportunities…</div>}
+      {loading && !jobs.length && <div className="empty loading-state">Loading job opportunities…</div>}
     </section>
+
+    {hasMoreJobs && <div className="load-more-jobs">
+      <button className="secondary" type="button" disabled={loading || loadingMore || loadedJobSearchKey !== currentJobSearchKey} onClick={() => void loadJobs(undefined, { append: true, offset: nextJobOffset })}>
+        {loadingMore ? "Loading more jobs…" : "Load More"}
+      </button>
+    </div>}
 
     <footer>AI Job Agent · Public job discovery · Applications always remain under your control.</footer>
       </div>

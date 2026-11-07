@@ -10,7 +10,7 @@ import { scoreJobMatch, type CandidatePreferences } from "./jobs/intelligence.js
 import { parseResumeBuffer, ResumeParseError } from "./jobs/resume-parser.js";
 import { analyzeJobFit } from "./jobs/fit-analysis.js";
 import { generateApplicationDraft } from "./jobs/application-draft.js";
-import { inferWorkMode, matchesRequiredSkills, matchesWorkMode, textRelevance } from "./jobs/search.js";
+import { inferWorkMode, matchesRequiredSkills, matchesSearchQuery, matchesWorkMode, overallRelevanceScore, textRelevance, tokenizeSearchQuery } from "./jobs/search.js";
 import { FOLLOW_UP_BUCKETS, isDateKey, matchesFollowUpBucket, type FollowUpBucket } from "./jobs/follow-ups.js";
 
 export const app = express();
@@ -348,9 +348,8 @@ function jobMatchesSavedSearch(job: {
   title: string; company: string; location: string | null; description: string; source: string;
   employmentType: string; skillsJson: string;
 }, filters: SavedSearchFilters): boolean {
-  const query = filters.query.toLowerCase();
   const jobSkills = readJsonList(job.skillsJson);
-  return (!query || [job.title, job.company, job.description].some(value => value.toLowerCase().includes(query))) &&
+  return matchesSearchQuery(job.title, job.company, job.description, filters.query) &&
     (!filters.location || (job.location ?? "").toLowerCase().includes(filters.location.toLowerCase())) &&
     (!filters.company || job.company.toLowerCase().includes(filters.company.toLowerCase())) &&
     (!filters.source || job.source === filters.source) &&
@@ -503,6 +502,7 @@ app.delete("/api/jobs/:id/save", requireAuth, async (req, res) => {
 app.get("/api/jobs", optionalAuth, async (req, res) => {
   try {
     const q = String(req.query.q ?? "").trim();
+    const queryTerms = tokenizeSearchQuery(q);
     const location = String(req.query.location ?? "").trim();
     const company = String(req.query.company ?? "").trim();
     const source = String(req.query.source ?? "").trim().toUpperCase();
@@ -512,7 +512,9 @@ app.get("/api/jobs", optionalAuth, async (req, res) => {
     const listingStatus = String(req.query.listingStatus ?? "OPEN").trim().toUpperCase();
     const requiredSkills = String(req.query.skills ?? "").split(",").map(skill => skill.trim()).filter(Boolean);
     const parsedLimit = Number(req.query.limit ?? 50);
+    const parsedOffset = Number(req.query.offset ?? 0);
     const take = Number.isFinite(parsedLimit) ? Math.min(Math.max(Math.floor(parsedLimit), 1), 100) : 50;
+    const skip = Number.isSafeInteger(parsedOffset) && parsedOffset >= 0 ? parsedOffset : null;
     const employmentTypes = ["FULL_TIME", "PART_TIME", "INTERNSHIP", "CONTRACT", "UNKNOWN"];
     const workModes = ["ANY", "REMOTE", "HYBRID", "ONSITE", "UNKNOWN"];
     const sortOptions = ["NEWEST", "MATCH", "RELEVANCE"];
@@ -534,6 +536,10 @@ app.get("/api/jobs", optionalAuth, async (req, res) => {
       res.status(400).json({ error: "sort must be NEWEST, MATCH or RELEVANCE." });
       return;
     }
+    if (skip === null) {
+      res.status(400).json({ error: "offset must be a non-negative safe integer." });
+      return;
+    }
     if (requiredSkills.length > 20 || requiredSkills.some(skill => skill.length > 80)) {
       res.status(400).json({ error: "Select up to 20 required skills, each no longer than 80 characters." });
       return;
@@ -541,7 +547,7 @@ app.get("/api/jobs", optionalAuth, async (req, res) => {
 
     const where = {
       AND: [
-        q ? { OR: [{ title: { contains: q } }, { company: { contains: q } }, { description: { contains: q } }] } : {},
+        ...queryTerms.map(term => ({ OR: [{ title: { contains: term } }, { company: { contains: term } }, { description: { contains: term } }] })),
         location ? { location: { contains: location } } : {},
         company ? { company: { contains: company } } : {},
         source ? { source } : {},
@@ -578,9 +584,11 @@ app.get("/api/jobs", optionalAuth, async (req, res) => {
         revalidationState,
         workMode: inferWorkMode(job.location, job.description),
         isSaved: savedJobIds.has(job.id),
-        match: scoreJobMatch({ title: job.title, location: job.location, category: job.category, skills }, profile)
+        match: scoreJobMatch({ title: job.title, location: job.location, category: job.category, skills }, profile),
+        searchRelevance: textRelevance(job.title, job.company, job.description, q)
       };
     }).filter(job =>
+      matchesSearchQuery(job.title, job.company, job.description, q) &&
       matchesWorkMode(job.location, job.description, workMode) &&
       matchesRequiredSkills(job.skills, requiredSkills)
     );
@@ -591,8 +599,8 @@ app.get("/api/jobs", optionalAuth, async (req, res) => {
       enriched.sort((a, b) => (b.match.score ?? -1) - (a.match.score ?? -1) || newestFirst(a, b));
     } else if (sort === "RELEVANCE") {
       enriched.sort((a, b) =>
-        (b.match.score ?? -1) - (a.match.score ?? -1) ||
-        textRelevance(b.title, b.company, b.description, q) - textRelevance(a.title, a.company, a.description, q) ||
+        overallRelevanceScore(b.searchRelevance.score, b.match.score, queryTerms.length > 0) -
+        overallRelevanceScore(a.searchRelevance.score, a.match.score, queryTerms.length > 0) ||
         newestFirst(a, b)
       );
     } else {
@@ -600,11 +608,16 @@ app.get("/api/jobs", optionalAuth, async (req, res) => {
     }
 
     const total = enriched.length;
-    const data = enriched.slice(0, take);
+    const data = enriched.slice(skip, skip + take);
+    const nextOffset = skip + data.length;
     res.json({
       data,
       count: data.length,
       total,
+      offset: skip,
+      limit: take,
+      nextOffset,
+      hasMore: nextOffset < total,
       profileConfigured: Boolean(profile.skills.length || profile.preferredRoles.length || profile.locations.length || profile.remotePreference !== "ANY"),
       filters: { employmentType: employmentType || null, workMode, company: company || null, skills: requiredSkills, sort, listingStatus }
     });

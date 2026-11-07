@@ -33,12 +33,12 @@ jobs:
         run: npm ci
 
       - name: Generate Prisma Client
-        run: npm run db:generate
+        run: npm run db:generate:sqlite
         env:
           DATABASE_URL: file:./dev.db
 
       - name: Build all workspaces
-        run: npm run build
+        run: npm run build:development
 
       - name: Prepare SQLite integration database
         run: npm run db:push

@@ -19,11 +19,21 @@ Vitest 5 requires Node.js 22.12 or newer.
 ## Setup
 ```bash
 npm install
-cp apps/api/.env.example apps/api/.env
-npm run db:generate
-npm run db:migrate
+cp apps/api/env.example apps/api/.env
+npm run db:generate:sqlite
 npm run dev
 ```
+
+For a **new, empty** SQLite file only, initialize its tables with `npm run db:push:sqlite`. Do not run that against an existing local database without first reviewing and backing up that file.
+
+### Database modes
+
+- **Local development:** SQLite uses `apps/api/prisma/schema.prisma` and `apps/api/prisma/migrations`. `npm run dev`, `npm run build:development`, and `npm run test:sqlite` generate the SQLite Prisma Client before compiling or running. Tests use the separate `integration-test.db` file.
+- **Production:** Neon PostgreSQL uses `apps/api/prisma/postgresql/schema.prisma` and its separate migration directory. `npm run build` (same as `npm run build:production`) generates the PostgreSQL client before compiling the API, then builds the frontend. `DATABASE_URL` is the runtime connection URL; `DIRECT_URL` is the direct connection URL used by Prisma migrations and schema-based client generation. Do not put these values in Vite variables or commit them.
+- **Build ordering:** SQLite and PostgreSQL Prisma Clients are generated into the same `@prisma/client` output. Build scripts run generation and TypeScript compilation sequentially. Do not run `npm run dev`, `npm run test:sqlite`, `npm run build:development`, or `npm run build` at the same time; each can select a different client provider.
+- **Migration safety:** Never apply SQLite migrations to PostgreSQL. The initial PostgreSQL baseline at `apps/api/prisma/postgresql/migrations/20261107104010_init/migration.sql` was generated locally from an empty schema and has not been applied anywhere. Review it, test it on an isolated PostgreSQL database or Neon development branch, then use `npm run db:migrate:deploy:postgresql` with `DIRECT_URL` set to the direct PostgreSQL URL when deploying. This creates an empty PostgreSQL schema; it does not copy local SQLite data.
+- **Existing local data:** Keep the existing SQLite file and history. The SQLite migration history predates parts of the current schema, so do not run `npm run db:migrate:dev:sqlite` against an existing local database until its migration-history drift has been resolved. `npm run db:push:sqlite` remains available for local schema synchronization; back up local data before using it.
+- **Schema consistency:** Run `npm run db:check-schemas` after editing either schema. It compares every model definition, including fields, relations, defaults, indexes, and constraints, while allowing the datasource blocks to differ.
 
 Frontend: http://localhost:5173  
 API: http://localhost:4000  
@@ -40,11 +50,16 @@ These are public board identifiers, not arbitrary company names. Check each prov
 
 ## Scripts
 - `npm run dev` — API and frontend
-- `npm run build` — build all workspaces
-- `npm run test` — prepare and run API tests against a separate `apps/api/integration-test.db` SQLite database; test fixtures and sync history cannot pollute your development `dev.db`.
+- `npm run build` or `npm run build:production` — generate the PostgreSQL Prisma Client, then build shared code, API, and frontend in order
+- `npm run build:development` — generate the SQLite Prisma Client, then build shared code, API, and frontend in order
+- `npm run test` or `npm run test:sqlite` — prepare and run API tests against a separate `apps/api/integration-test.db` SQLite database; test fixtures and sync history cannot pollute your development `dev.db`.
 - `npm run test:live-sources -w @job-agent/api` — manually smoke-test live public feeds (requires three board IDs)
 - `npm run db:generate` — generate Prisma client
 - `npm run db:migrate` — create/apply local migration
+- `npm run db:generate:sqlite` / `npm run db:generate:postgresql` — generate the provider-specific Prisma Client into the shared `@prisma/client` import location
+- `npm run db:migrate:dev:sqlite` / `npm run db:migrate:dev:postgresql` — create and apply a development migration for the selected provider
+- `npm run db:migrate:deploy:sqlite` / `npm run db:migrate:deploy:postgresql` — apply checked-in migrations for the selected provider
+- `npm run db:check-schemas` — check that the two model definitions stay aligned
 
 ## Continuous integration
 GitHub Actions runs on pushes and pull requests targeting `main`. It installs from the lockfile, generates Prisma Client, builds all workspaces, runs API tests, and checks dependencies with `npm audit`.

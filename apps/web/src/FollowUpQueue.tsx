@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { API_BASE_URL, apiFetch } from "./api.js";
 
 type Bucket = "OVERDUE" | "TODAY" | "UPCOMING" | "ALL";
 type FollowUpItem = {
@@ -10,7 +11,7 @@ type FollowUpItem = {
   job: { id: string; title: string; company: string; location: string | null; applicationUrl: string };
 };
 
-const API = "http://localhost:4000";
+const API = API_BASE_URL;
 const BUCKETS: Array<{ value: Bucket; label: string }> = [
   { value: "OVERDUE", label: "Overdue" },
   { value: "TODAY", label: "Today" },
@@ -38,7 +39,7 @@ export function FollowUpQueue() {
     setError("");
     try {
       const params = new URLSearchParams({ bucket: selected, today: localDateKey() });
-      const response = await fetch(API + "/api/applications/follow-ups?" + params.toString(), { credentials: "include" });
+      const response = await apiFetch(API + "/api/applications/follow-ups?" + params.toString());
       const body = await response.json();
       if (!response.ok || !Array.isArray(body.data)) throw new Error(body.error || "Could not load follow-ups");
       setItems(body.data);

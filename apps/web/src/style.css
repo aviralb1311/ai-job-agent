@@ -106,6 +106,22 @@
   .follow-up-item-meta { justify-content: flex-start; text-align: left; }
 }
 
+/* Saved jobs shortlist */
+.saved-jobs-section{margin:18px 0;padding:20px;border:1px solid #e9edf4;border-radius:14px;background:#fff;box-shadow:0 2px 8px #172b4d04}
+.saved-job-list{display:grid;gap:10px}
+.saved-job-card{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:15px 16px;border:1px solid #e9edf4;border-radius:11px;background:#fbfcff}
+.saved-job-info{display:grid;gap:7px;min-width:0}
+.saved-job-heading{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.saved-job-heading h4{margin:0;color:#243250;font-size:14px;line-height:1.4;overflow-wrap:anywhere}
+.saved-job-info>strong{font-size:12px;color:#526078}
+.saved-job-meta{display:flex;align-items:center;gap:9px;flex-wrap:wrap;color:#8490a4;font-size:11px}
+.saved-job-actions{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap}
+.saved-job-actions a{color:#405bc9;font-size:11px;font-weight:700;text-decoration:none;white-space:nowrap}
+.saved-job-actions a:hover{text-decoration:underline}
+.saved-job-actions button{white-space:nowrap}
+.saved-jobs-empty{margin:0;padding:20px;border:1px dashed #dbe2ef;border-radius:10px;color:#77829a;font-size:12px;text-align:center}
+@media(max-width:650px){.saved-jobs-section{padding:15px}.saved-jobs-section>.section-heading{align-items:flex-start;flex-direction:column}.saved-job-card{align-items:flex-start;flex-direction:column;padding:13px}.saved-job-actions{justify-content:flex-start;width:100%}}
+
 
 /* Account access */
 .account-controls{display:flex;align-items:center;gap:.7rem;margin-left:auto;font-size:.88rem;color:var(--muted,#64748b)}
@@ -188,6 +204,10 @@ button.secondary:hover:not(:disabled){background:#f5f7ff}
 .job{padding:18px;border:1px solid #e8edf4;border-radius:13px;box-shadow:0 2px 8px #172b4d04;transition:transform .18s,box-shadow .18s,border-color .18s}
 .job:hover{transform:translateY(-2px);border-color:#d8e0f4;box-shadow:0 9px 22px #172b4d0b}
 .job h3{font-size:15px;line-height:1.4;letter-spacing:-.2px;color:#243250}
+.search-relevance-score{font-size:10px;font-weight:800;letter-spacing:.3px;padding:6px 9px;border-radius:20px;background:#eff0ff;color:#4f55a8}
+.search-relevance-reasons{font-size:11px;color:#50579a;line-height:1.5;margin:9px 0 0}
+.load-more-jobs{display:flex;justify-content:center;margin:22px 0 8px}
+.load-more-jobs button{min-width:170px;min-height:42px}
 .company{font-size:12px;color:#596780}
 .job .muted{font-size:10px}
 .source,.status,.revalidation-badge,.category-chip,.match-score{font-size:9px;border-radius:20px}

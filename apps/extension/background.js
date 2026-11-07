@@ -1,4 +1,6 @@
-const API_BASE = "http://localhost:4000";
+importScripts("config.js");
+
+const API_BASE = globalThis.AI_JOB_AGENT_CONFIG.apiBaseUrl.replace(/\/+$/, "");
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type !== "AI_JOB_AGENT_GET_PROFILE") return false;

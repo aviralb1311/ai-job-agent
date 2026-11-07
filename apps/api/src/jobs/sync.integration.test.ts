@@ -572,6 +572,115 @@ describe("job sync SQLite integration", () => {
   });
 
 
+  it("paginates filtered and sorted job results without repeating records", async () => {
+    const paginationJobs = [];
+    for (let index = 0; index < 5; index++) {
+      paginationJobs.push(await prisma.job.create({ data: {
+        source: "GREENHOUSE",
+        externalId: `pagination-job-${index}`,
+        title: `Pagination Role ${index}`,
+        company: "Pagination Co",
+        location: "Remote - India",
+        description: "Backend work with Node.js",
+        employmentType: "FULL_TIME",
+        skillsJson: JSON.stringify(["Node.js"]),
+        applicationUrl: `https://jobs.example.test/pagination-${index}`,
+        canonicalUrl: `https://jobs.example.test/pagination-${index}`,
+        publishedAt: new Date(Date.UTC(2026, 0, 1, 0, index))
+      } }));
+    }
+    await prisma.userSavedJob.create({ data: { userId: testUserId, jobId: paginationJobs[2].id } });
+
+    const server = app.listen(0);
+    try {
+      await new Promise<void>(resolve => server.once("listening", resolve));
+      const address = server.address();
+      if (!address || typeof address === "string") throw new Error("Test server did not bind to a TCP port");
+      const base = `http://127.0.0.1:${address.port}/api/jobs`;
+      const filters = { q: "pagination", company: "Pagination", source: "GREENHOUSE", employmentType: "FULL_TIME", workMode: "REMOTE", skills: "node.js", sort: "NEWEST", limit: "2" };
+      const fetchPage = async (offset: number) => {
+        const params = new URLSearchParams({ ...filters, offset: String(offset) });
+        const response = await authenticatedFetch(`${base}?${params}`);
+        return { response, body: await response.json() as { data: Array<{ id: string; isSaved: boolean }>; total: number; offset: number; nextOffset: number; hasMore: boolean } };
+      };
+
+      const first = await fetchPage(0);
+      expect(first.response.status).toBe(200);
+      expect(first.body).toMatchObject({ total: 5, offset: 0, nextOffset: 2, hasMore: true });
+      expect(first.body.data.map(job => job.id)).toEqual([paginationJobs[4].id, paginationJobs[3].id]);
+
+      const second = await fetchPage(first.body.nextOffset);
+      expect(second.response.status).toBe(200);
+      expect(second.body).toMatchObject({ total: 5, offset: 2, nextOffset: 4, hasMore: true });
+      expect(second.body.data.map(job => job.id)).toEqual([paginationJobs[2].id, paginationJobs[1].id]);
+      expect(second.body.data[0].isSaved).toBe(true);
+
+      const third = await fetchPage(second.body.nextOffset);
+      expect(third.body).toMatchObject({ total: 5, offset: 4, nextOffset: 5, hasMore: false });
+      expect(third.body.data.map(job => job.id)).toEqual([paginationJobs[0].id]);
+      const allIds = [...first.body.data, ...second.body.data, ...third.body.data].map(job => job.id);
+      expect(new Set(allIds).size).toBe(allIds.length);
+
+      const invalidOffset = await authenticatedFetch(`${base}?offset=-1`);
+      expect(invalidOffset.status).toBe(400);
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+    }
+  });
+
+
+  it("matches query words separately, explains text relevance and combines it with profile fit", async () => {
+    await prisma.userCandidateProfile.create({
+      data: {
+        userId: testUserId,
+        skillsJson: JSON.stringify(["Node.js", "PostgreSQL", "Docker"]),
+        preferredRoles: JSON.stringify(["BACKEND"]),
+        remotePreference: "REMOTE"
+      }
+    });
+    const exactTitle = await prisma.job.create({ data: {
+      source: "GREENHOUSE", externalId: "relevance-exact-title", title: "Backend Engineer", company: "Exact Title Co",
+      location: "Remote", description: "Build APIs", category: "BACKEND", skillsJson: JSON.stringify(["Node.js", "PostgreSQL"]),
+      applicationUrl: "https://jobs.example.test/relevance-title", canonicalUrl: "https://jobs.example.test/relevance-title"
+    } });
+    const reorderedTitle = await prisma.job.create({ data: {
+      source: "LEVER", externalId: "relevance-reordered-title", title: "Engineer for Backend Systems", company: "Different Co",
+      location: "Remote", description: "Build services", category: "OTHER", skillsJson: "[]",
+      applicationUrl: "https://jobs.example.test/relevance-reordered", canonicalUrl: "https://jobs.example.test/relevance-reordered"
+    } });
+    const companyMatch = await prisma.job.create({ data: {
+      source: "ASHBY", externalId: "relevance-company", title: "Product Designer", company: "Backend Engineer Labs",
+      location: "Remote", description: "Design useful products", category: "OTHER", skillsJson: "[]",
+      applicationUrl: "https://jobs.example.test/relevance-company", canonicalUrl: "https://jobs.example.test/relevance-company"
+    } });
+    const descriptionMatch = await prisma.job.create({ data: {
+      source: "GREENHOUSE", externalId: "relevance-description", title: "Product Manager", company: "Another Co",
+      location: "Remote", description: "Experience with backend engineering systems", category: "OTHER", skillsJson: "[]",
+      applicationUrl: "https://jobs.example.test/relevance-description", canonicalUrl: "https://jobs.example.test/relevance-description"
+    } });
+
+    const server = app.listen(0);
+    try {
+      await new Promise<void>(resolve => server.once("listening", resolve));
+      const address = server.address();
+      if (!address || typeof address === "string") throw new Error("Test server did not bind to a TCP port");
+      const params = new URLSearchParams({ q: "BACKEND, Engineer!", sort: "RELEVANCE" });
+      const response = await authenticatedFetch(`http://127.0.0.1:${address.port}/api/jobs?${params}`);
+      const body = await response.json() as { data: Array<{ id: string; match: { score: number | null }; searchRelevance: { score: number; reasons: string[] } }>; total: number };
+
+      expect(response.status).toBe(200);
+      expect(body.total).toBe(4);
+      expect(body.data.map(job => job.id)).toEqual([exactTitle.id, reorderedTitle.id, companyMatch.id, descriptionMatch.id]);
+      expect(body.data[0].match.score).toBe(77);
+      expect(body.data[0].searchRelevance.score).toBe(100);
+      expect(body.data[0].searchRelevance.reasons).toContain("All search words appear together in the title.");
+      expect(body.data[2].searchRelevance.score).toBeGreaterThan(body.data[3].searchRelevance.score);
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+    }
+  });
+
+
   it("saves a search and reports only newly discovered matching jobs once", async () => {
     const server = app.listen(0);
     try {
@@ -584,7 +693,7 @@ describe("job sync SQLite integration", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: "Remote backend roles",
-          filters: { query: "backend", location: "India", company: "", source: "GREENHOUSE", employmentType: "FULL_TIME", workMode: "REMOTE", skills: ["Node.js"] }
+          filters: { query: "BACKEND, engineer!", location: "India", company: "", source: "GREENHOUSE", employmentType: "FULL_TIME", workMode: "REMOTE", skills: ["Node.js"] }
         })
       });
       const created = await createResponse.json() as { data?: { id: string; name: string }; error?: string };
@@ -610,6 +719,20 @@ describe("job sync SQLite integration", () => {
           skillsJson: JSON.stringify(["Node.js"])
         }
       });
+      const reorderedMatchingJob = await prisma.job.create({
+        data: {
+          source: "GREENHOUSE",
+          externalId: "saved-search-alert-reordered-match",
+          title: "Engineer for Backend Systems",
+          company: "Example Systems",
+          location: "Remote - India",
+          description: "Backend APIs using Node.js",
+          employmentType: "FULL_TIME",
+          applicationUrl: "https://jobs.example.test/alert-reordered-match",
+          canonicalUrl: "https://jobs.example.test/alert-reordered-match",
+          skillsJson: JSON.stringify(["Node.js"])
+        }
+      });
       await prisma.job.create({
         data: {
           source: "LEVER",
@@ -629,8 +752,8 @@ describe("job sync SQLite integration", () => {
       const alertResponse = await authenticatedFetch(alertUrl);
       const alertBody = await alertResponse.json() as { data: Array<{ id: string }>; count: number };
       expect(alertResponse.status).toBe(200);
-      expect(alertBody.count).toBe(1);
-      expect(alertBody.data[0].id).toBe(matchingJob.id);
+      expect(alertBody.count).toBe(2);
+      expect(alertBody.data.map(job => job.id)).toEqual(expect.arrayContaining([matchingJob.id, reorderedMatchingJob.id]));
 
       const repeatedCheck = await authenticatedFetch(alertUrl);
       const repeatedBody = await repeatedCheck.json() as { data: unknown[]; count: number };

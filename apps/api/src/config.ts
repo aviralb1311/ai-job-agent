@@ -5,7 +5,7 @@ const schema = z.object({
   PORT: z.coerce.number().default(4000),
   DATABASE_URL: z.string().default("file:./dev.db"),
   CORS_ORIGIN: z.string().default("http://localhost:5173"),
-  AUTH_COOKIE_SECURE: z.enum(["true", "false"]).default("false").transform(value => value === "true"),
+  AUTH_COOKIE_SECURE: z.enum(["true", "false"]).transform(value => value === "true"),
   SESSION_TTL_DAYS: z.coerce.number().int().min(1).max(30).default(7),
   ADMIN_EMAILS: z.string().default(""),
   GREENHOUSE_BOARDS: z.string().default(""),
@@ -15,5 +15,13 @@ const schema = z.object({
   SOURCE_SYNC_INTERVAL_MINUTES: z.coerce.number().int().min(0).max(1440).default(0)
 });
 
-export const config = schema.parse(process.env);
+export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
+  const defaults = {
+    ...env,
+    AUTH_COOKIE_SECURE: env.AUTH_COOKIE_SECURE ?? (env.NODE_ENV === "production" ? "true" : "false")
+  };
+  return schema.parse(defaults);
+}
+
+export const config = loadConfig();
 export const list = (value: string) => value.split(",").map(x => x.trim()).filter(Boolean);

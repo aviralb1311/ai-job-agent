@@ -9,11 +9,22 @@
   ],
   "scripts": {
     "dev": "concurrently -n api,web -c blue,green \"npm run dev -w @job-agent/api\" \"npm run dev -w @job-agent/web\"",
-    "build": "npm run build -w @job-agent/shared && npm run build -w @job-agent/api && npm run build -w @job-agent/web",
-    "test": "npm run test -w @job-agent/api",
+    "build": "npm run build:production",
+    "build:development": "npm run build -w @job-agent/shared && npm run build:development -w @job-agent/api && npm run build -w @job-agent/web",
+    "build:production": "npm run build -w @job-agent/shared && npm run build:production -w @job-agent/api && npm run build -w @job-agent/web",
+    "test": "npm run test:sqlite",
+    "test:sqlite": "npm run test -w @job-agent/api",
     "db:generate": "npm run db:generate -w @job-agent/api",
     "db:migrate": "npm run db:migrate -w @job-agent/api",
-    "db:push": "npm run db:push -w @job-agent/api"
+    "db:push": "npm run db:push -w @job-agent/api",
+    "db:generate:sqlite": "npm run db:generate:sqlite -w @job-agent/api",
+    "db:generate:postgresql": "npm run db:generate:postgresql -w @job-agent/api",
+    "db:migrate:dev:sqlite": "npm run db:migrate:dev:sqlite -w @job-agent/api",
+    "db:migrate:deploy:sqlite": "npm run db:migrate:deploy:sqlite -w @job-agent/api",
+    "db:migrate:dev:postgresql": "npm run db:migrate:dev:postgresql -w @job-agent/api",
+    "db:migrate:deploy:postgresql": "npm run db:migrate:deploy:postgresql -w @job-agent/api",
+    "db:push:sqlite": "npm run db:push:sqlite -w @job-agent/api",
+    "db:check-schemas": "npm run check:prisma-schemas -w @job-agent/api"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",

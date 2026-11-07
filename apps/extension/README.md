@@ -9,6 +9,8 @@ The Manifest V3 extension currently supports Greenhouse application detection an
 3. Select **Load unpacked** (first install), or click **Reload** after pulling updates.
 4. Choose the `apps/extension` folder from this repository.
 
+For local development, `config.js` uses `http://localhost:4000`. To use a hosted API, set `apiBaseUrl` in `config.js` to its HTTPS URL and add that API host to `host_permissions` in `manifest.json` before reloading the extension. Keep only the specific API host needed; do not add API secrets to the extension.
+
 ## Connect your account
 
 1. Start the AI Job Agent API and web app locally.
