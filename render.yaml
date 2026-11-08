@@ -1,0 +1,23 @@
+# Render Blueprint — AI Job Agent API
+#
+# Deploys the API service only. The web app is deployed separately on Vercel.
+# The production database is hosted on Neon and supplied via DATABASE_URL / DIRECT_URL.
+# Run migrations after deploy: npm run db:migrate:deploy:postgresql -w @job-agent/api
+
+services:
+  - type: web
+    name: ai-job-agent-api
+    runtime: node
+    rootDir: .
+    buildCommand: npm run build:production
+    startCommand: npm run start -w @job-agent/api
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      - key: CORS_ORIGIN
+        sync: false
