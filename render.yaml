@@ -10,7 +10,7 @@ services:
     runtime: node
     plan: free
     rootDir: .
-    buildCommand: npm run build:production
+    buildCommand: npm ci --include=dev && npm run build:production
     startCommand: npm run start -w @job-agent/api
     healthCheckPath: /api/health
     envVars:
